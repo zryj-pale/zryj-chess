@@ -27,4 +27,14 @@ stretch_mode = 0
 [node name="muzyka" type="AudioStreamPlayer" parent="."]
 stream = ExtResource("3_y8fdf")
 
+[node name="zryj pale" type="RichTextLabel" parent="."]
+z_index = 4
+layout_mode = 0
+offset_left = 312.0
+offset_top = 163.0
+offset_right = 412.8163
+offset_bottom = 215.65306
+scale = Vector2(2.45, 2.45)
+text = "zryj pale ©"
+
 [connection signal="pressed" from="TextureButton" to="." method="_on_texture_button_pressed"]
