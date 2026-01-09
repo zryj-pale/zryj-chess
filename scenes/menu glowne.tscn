@@ -1,0 +1,30 @@
+[gd_scene load_steps=4 format=3 uid="uid://b1d864e021a2s"]
+
+[ext_resource type="Script" uid="uid://d1u2ivtpw2q81" path="res://scripts/menu_glowne.gd" id="1_h3atn"]
+[ext_resource type="Texture2D" uid="uid://cm0f8eprnvryv" path="res://assets/ekran poczatkowy/robcza.jpeg" id="2_y8fdf"]
+[ext_resource type="AudioStream" uid="uid://cayiljklrxvxm" path="res://audio/untitled.wav" id="3_y8fdf"]
+
+[node name="Control" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_h3atn")
+
+[node name="TextureButton" type="TextureButton" parent="."]
+z_index = 5
+layout_mode = 0
+offset_left = 125.0
+offset_top = 55.0
+offset_right = 1277.0
+offset_bottom = 2615.0
+scale = Vector2(0.13, 0.13)
+texture_normal = ExtResource("2_y8fdf")
+stretch_mode = 0
+
+[node name="muzyka" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("3_y8fdf")
+
+[connection signal="pressed" from="TextureButton" to="." method="_on_texture_button_pressed"]
