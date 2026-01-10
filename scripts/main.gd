@@ -1,6 +1,15 @@
 extends Node2D
 
 @onready var plansza = $TileMapLayer
+@export var dodawanie_pol = false
+
+
+enum stany{
+	IDLE,
+	GRAB,
+	SELECT
+}
+var stan := stany.IDLE
 
 var figury = []
 var chwycona = null
@@ -31,40 +40,51 @@ func najechana_figura():
 func chwyc(figura):
 	chwycona = figura
 	poczatkowe_pole = plansza.local_to_map(chwycona.global_position)
-	usun_znaczniki(null, 0)
-	dodaj_znacznik(poczatkowe_pole, 0)
 	chwycona.top_level = true
 
 func _process(_delta: float) -> void:
-	var docelowe_pole = plansza.local_to_map(get_global_mouse_position())
+	var wskazane_pole = plansza.local_to_map(get_global_mouse_position())
+	match stan:
+		stany.IDLE:
+			stan_idle(wskazane_pole)
+		stany.GRAB:
+			stan_grab(wskazane_pole)
+		stany.SELECT:
+			stan_select(wskazane_pole)
+
+func stan_idle(wskazane_pole):
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		if not chwycona:
-			if najechana_figura() and najechana_figura().kolor == kolor_posuniecia:
-				chwyc(najechana_figura())
-		else:
-			chwycona.global_position = get_global_mouse_position()
-		if not chwycona and wybrana and moze_ruszyc(wybrana, poczatkowe_pole, docelowe_pole):
-			ruch(wybrana, docelowe_pole)
-			usun_znaczniki()
-			dodaj_znacznik(poczatkowe_pole, 1)
-			dodaj_znacznik(docelowe_pole, 1)
-			wybrana = null
-	elif chwycona: #jesli puszczona
-		if docelowe_pole == poczatkowe_pole:
-			wybrana = chwycona
-			wybrana.global_position = plansza.map_to_local(poczatkowe_pole)
-		elif moze_ruszyc(chwycona, poczatkowe_pole, docelowe_pole):
-			ruch(chwycona, docelowe_pole)
-			usun_znaczniki()
-			dodaj_znacznik(poczatkowe_pole, 1)
-			dodaj_znacznik(docelowe_pole, 1)
-			wybrana = null
-		else:
-			if poczatkowe_pole != docelowe_pole:
-				$dzwiek/zakaz.play()
-			chwycona.global_position = plansza.map_to_local(poczatkowe_pole)
-		chwycona.top_level = false
-		chwycona = null
+		if najechana_figura()and najechana_figura().kolor == kolor_posuniecia:
+			chwyc(najechana_figura())
+			stan = stany.GRAB
+
+func stan_grab(wskazane_pole):
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		chwycona.global_position = get_global_mouse_position()
+		return
+	puszczenie(wskazane_pole)
+
+func stan_select(wskazane_pole):
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		return
+	if moze_ruszyc(wybrana, poczatkowe_pole, wskazane_pole):
+		ruch(wybrana, wskazane_pole)
+	stan = stany.IDLE
+
+func puszczenie(wskazane_pole):
+	if wskazane_pole == poczatkowe_pole:
+		wybrana = chwycona
+		wybrana.global_position = plansza.map_to_local(poczatkowe_pole)
+		stan = stany.SELECT
+	elif moze_ruszyc(chwycona, poczatkowe_pole, wskazane_pole):
+		ruch(chwycona, wskazane_pole)
+		stan = stany.IDLE
+	else:
+		$dzwiek/zakaz.play()
+		chwycona.global_position = plansza.map_to_local(poczatkowe_pole)
+		stan = stany.IDLE
+	chwycona.top_level = false
+	chwycona = null
 
 func moze_ruszyc(figura, _poczatkowe_pole, docelowe_pole):
 	figura.global_position = plansza.map_to_local(docelowe_pole)
@@ -79,7 +99,8 @@ func moze_ruszyc(figura, _poczatkowe_pole, docelowe_pole):
 	
 func _input(_event: InputEvent) -> void:
 	if Input.is_action_just_pressed("space"):
-		dodaj_pole(plansza.local_to_map(get_global_mouse_position()))
+		if dodawanie_pol == true:
+			dodaj_pole(plansza.local_to_map(get_global_mouse_position()))
 	
 func pozycja(figura):
 	return plansza.local_to_map(figura.global_position)
@@ -148,11 +169,6 @@ func czy_szach(kolor_krola, wykluczona=null):
 				if pozycja(get_king(kolor_krola)) == mozliwy_ruch and kolor_krola != figura.kolor:
 					return true
 	return false
-
-func drugi_kolor(kolor):
-	if kolor == "b":
-		return "c"
-	return "b"
 
 func get_king(kolor):
 	for figura in figury:
@@ -314,7 +330,7 @@ func losowanie():
 	var okno:Control = OKNO.instantiate()
 	okno.global_position = get_viewport_rect().size/2
 	add_child(okno)
-	await okno.wynik
+	await okno.koniec_rzutu
 	if okno.wyrzucona == "reszka":
 		kolor_posuniecia = "c"
 	else:

@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="zryj chess"
-run/main_scene="uid://c63as8hv8g444"
+run/main_scene="uid://b1d864e021a2s"
 config/features=PackedStringArray("4.5", "Mobile")
 boot_splash/image="res://assets/bruno blunt Medium.png"
 
@@ -21,12 +21,12 @@ buses/default_bus_layout=""
 
 [display]
 
-window/size/viewport_width=1024
-window/size/viewport_height=1024
+window/size/viewport_width=512
+window/size/viewport_height=512
 window/stretch/mode="viewport"
 window/stretch/aspect="ignore"
-window/stretch/scale=2.0
 window/stretch/scale_mode="integer"
+window/vsync/vsync_mode=0
 
 [editor_plugins]
 

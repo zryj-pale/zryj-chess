@@ -13,17 +13,6 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_h3atn")
 
-[node name="TextureButton" type="TextureButton" parent="."]
-z_index = 5
-layout_mode = 0
-offset_left = 125.0
-offset_top = 55.0
-offset_right = 1277.0
-offset_bottom = 2615.0
-scale = Vector2(0.13, 0.13)
-texture_normal = ExtResource("2_y8fdf")
-stretch_mode = 0
-
 [node name="muzyka" type="AudioStreamPlayer" parent="."]
 stream = ExtResource("3_y8fdf")
 
@@ -37,4 +26,14 @@ offset_bottom = 215.65306
 scale = Vector2(2.45, 2.45)
 text = "zryj pale ©"
 
-[connection signal="pressed" from="TextureButton" to="." method="_on_texture_button_pressed"]
+[node name="robcza" type="TextureButton" parent="."]
+z_index = 4
+layout_mode = 0
+offset_left = 100.0
+offset_top = 65.0
+offset_right = 1252.0
+offset_bottom = 2625.0
+scale = Vector2(0.13, 0.13)
+texture_normal = ExtResource("2_y8fdf")
+
+[connection signal="pressed" from="robcza" to="." method="_on_robcza_pressed"]

@@ -21,3 +21,6 @@ func _process(delta: float) -> void:
 		var a = (1+sin(tik))*10
 		scale = Vector3(a,a,a)
 		tik += 0.001
+
+func _on_node_3d_wyrzucona(strona: Variant) -> void:
+	wyswietl(strona)
