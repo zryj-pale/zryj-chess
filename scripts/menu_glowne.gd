@@ -11,3 +11,12 @@ func _ready() -> void:
 
 func _on_robcza_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
+
+
+func _on_video_stream_player_finished() -> void:
+	await get_tree().create_timer(1).timeout
+	$VideoStreamPlayer.visible = false
+
+
+func _on_ustawianie_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/ustawianie.tscn")

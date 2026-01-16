@@ -13,11 +13,15 @@ config_version=5
 config/name="zryj chess"
 run/main_scene="uid://b1d864e021a2s"
 config/features=PackedStringArray("4.5", "Mobile")
-boot_splash/image="res://assets/bruno blunt Medium.png"
+boot_splash/image="uid://cmbtixykhyb0q"
 
 [audio]
 
 buses/default_bus_layout=""
+
+[autoload]
+
+PozycjaOsobista="*res://scripts/pozycja_osobista.gd"
 
 [display]
 

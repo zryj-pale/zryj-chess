@@ -30,6 +30,13 @@ func _ready() -> void:
 	generacja_pol(6)
 	domyslne_ustawienie()
 	losowanie()
+	ustawienie_z_pozycji()
+
+func ustawienie_z_pozycji():
+	var ustawienie = PozycjaOsobista.ustawienia_bialych
+	for figura in ustawienie:
+		dodaj(figura[0], "b", figura[1])
+	
 
 func najechana_figura():
 	for figura in figury:
@@ -176,10 +183,10 @@ func get_king(kolor):
 			return figura
 
 func domyslne_ustawienie():
-	dodaj("S", "b", Vector2i(2, 5))
-	dodaj("S", "b", Vector2i(4, 5))
-	dodaj("W", "b", Vector2i(3, 5))
-	dodaj("K", "b", Vector2i(2, 6))
+	#dodaj("S", "b", Vector2i(2, 5))
+	#dodaj("S", "b", Vector2i(4, 5))
+	#dodaj("W", "b", Vector2i(3, 5))
+	#dodaj("K", "b", Vector2i(2, 6))
 	
 	dodaj("S", "c", Vector2i(2, 2))
 	dodaj("K", "c", Vector2i(2,1))
@@ -316,7 +323,7 @@ func koniec_gry(kolor_wygranej=null):
 			print("czarne wygrywaja!")
 		null:
 			print("pat!")
-	queue_free()
+	get_tree().change_scene_to_file("res://scenes/menu glowne.tscn")
 
 func moze_promowac(figura):
 	if figura.typ == "P":
@@ -331,6 +338,7 @@ func losowanie():
 	okno.global_position = get_viewport_rect().size/2
 	add_child(okno)
 	await okno.koniec_rzutu
+	Engine.time_scale = 1
 	if okno.wyrzucona == "reszka":
 		kolor_posuniecia = "c"
 	else:

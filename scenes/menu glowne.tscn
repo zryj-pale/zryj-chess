@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3 uid="uid://b1d864e021a2s"]
+[gd_scene load_steps=5 format=3 uid="uid://b1d864e021a2s"]
 
 [ext_resource type="Script" uid="uid://d1u2ivtpw2q81" path="res://scripts/menu_glowne.gd" id="1_h3atn"]
 [ext_resource type="Texture2D" uid="uid://cm0f8eprnvryv" path="res://assets/ekran poczatkowy/robcza.jpeg" id="2_y8fdf"]
 [ext_resource type="AudioStream" uid="uid://cayiljklrxvxm" path="res://audio/untitled.wav" id="3_y8fdf"]
+[ext_resource type="VideoStream" uid="uid://brbnfcddlyor8" path="res://assets/zryj-pale-intro.ogv" id="4_db0g3"]
 
 [node name="Control" type="Control"]
 layout_mode = 3
@@ -36,4 +37,24 @@ offset_bottom = 2625.0
 scale = Vector2(0.13, 0.13)
 texture_normal = ExtResource("2_y8fdf")
 
+[node name="VideoStreamPlayer" type="VideoStreamPlayer" parent="."]
+z_index = 5
+layout_mode = 0
+offset_right = 512.0
+offset_bottom = 512.0
+stream = ExtResource("4_db0g3")
+autoplay = true
+expand = true
+
+[node name="ustawianie" type="Button" parent="."]
+z_index = 4
+layout_mode = 0
+offset_left = 307.0
+offset_top = 309.0
+offset_right = 469.0
+offset_bottom = 395.0
+text = "ustawianie pozycji"
+
 [connection signal="pressed" from="robcza" to="." method="_on_robcza_pressed"]
+[connection signal="finished" from="VideoStreamPlayer" to="." method="_on_video_stream_player_finished"]
+[connection signal="pressed" from="ustawianie" to="." method="_on_ustawianie_pressed"]
