@@ -9,8 +9,9 @@ var wartosci_figur = {
 	"G":2,
 	"W":4,
 	"H":6,
-	"K":0
+	"K":6
 }
+const MAX_PUNKTY = 16
 
 
 
@@ -28,10 +29,111 @@ var dostepne_pola = []
 var kolor_posuniecia = "b"
 
 var wybrana = null
+var dragging = false
+var drag_piece_type = null
+var drag_preview = null
 
 func _ready() -> void:
-	print(int("b"))
 	generacja_pol(1,4,6,6)
+
+func _on_piece_selected(typ: String):
+	drag_piece_type = typ
+	dragging = true
+	create_drag_preview(typ)
+
+func create_drag_preview(typ: String):
+	if drag_preview:
+		drag_preview.queue_free()
+	drag_preview = preload("res://scenes/figura.tscn").instantiate()
+	drag_preview.typ = typ
+	drag_preview.kolor = kolor_posuniecia
+	drag_preview.top_level = true
+	drag_preview.modulate = Color(1, 1, 1, 0.7)
+	drag_preview.get_node("tekstura/Area2D").monitoring = false
+	drag_preview.get_node("tekstura/Area2D").monitorable = false
+	add_child(drag_preview)
+
+@onready var progress_bar = $ProgressBar
+@onready var punkty_label = $PunktyLabel
+
+func _process(_delta: float) -> void:
+	if dragging and drag_preview:
+		drag_preview.global_position = get_global_mouse_position()
+	var punkty = oblicz_punkty(kolor_posuniecia)
+	progress_bar.value = punkty
+	punkty_label.text = str(punkty) + "/" + str(MAX_PUNKTY)
+	if kolor_posuniecia == "b":
+		progress_bar.modulate = Color(1, 1, 1)
+		punkty_label.modulate = Color(1, 1, 1)
+	else:
+		progress_bar.modulate = Color(0.4, 0.4, 0.4)
+		punkty_label.modulate = Color(0.4, 0.4, 0.4)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if dragging:
+			var wskazane_pole = plansza.local_to_map(get_global_mouse_position())
+			if wskazane_pole.x >= 0 and wskazane_pole.x <= 7 and wskazane_pole.y >= 0 and wskazane_pole.y <= 7 and stoi_figura(wskazane_pole) == null and can_place(drag_piece_type):
+				dodaj(drag_piece_type, kolor_posuniecia, wskazane_pole)
+				zapisz_figure(drag_piece_type, wskazane_pole)
+			dragging = false
+			drag_piece_type = null
+			if drag_preview:
+				drag_preview.queue_free()
+				drag_preview = null
+		else:
+			var figura = najechana_figura()
+			if figura and figura.kolor == kolor_posuniecia:
+				usun_figure(figura)
+
+func usun_figure(figura):
+	var pole = pozycja(figura)
+	usun_z_pamieci(figura.typ, pole)
+	figury.erase(figura)
+	figura.queue_free()
+	$dzwiek/zakaz.play()
+
+func usun_z_pamieci(typ: String, pole: Vector2i):
+	if kolor_posuniecia == "b":
+		for i in range(PozycjaOsobista.ustawienia_bialych.size() - 1, -1, -1):
+			var ustawienie = PozycjaOsobista.ustawienia_bialych[i]
+			if ustawienie[0] == typ and ustawienie[1] == pole:
+				PozycjaOsobista.ustawienia_bialych.remove_at(i)
+				break
+	else:
+		for i in range(PozycjaOsobista.ustawienia_czarnych.size() - 1, -1, -1):
+			var ustawienie = PozycjaOsobista.ustawienia_czarnych[i]
+			if ustawienie[0] == typ and ustawienie[1] == pole:
+				PozycjaOsobista.ustawienia_czarnych.remove_at(i)
+				break
+
+func zapisz_figure(typ: String, pole: Vector2i):
+	if kolor_posuniecia == "b":
+		PozycjaOsobista.ustawienia_bialych.append([typ, pole])
+	else:
+		PozycjaOsobista.ustawienia_czarnych.append([typ, pole])
+
+func oblicz_punkty(kolor: String) -> int:
+	var punkty = 0
+	var ustawienia = PozycjaOsobista.ustawienia_bialych if kolor == "b" else PozycjaOsobista.ustawienia_czarnych
+	for ustawienie in ustawienia:
+		punkty += wartosci_figur.get(ustawienie[0], 0)
+	return punkty
+
+func ma_krola(kolor: String) -> bool:
+	var ustawienia = PozycjaOsobista.ustawienia_bialych if kolor == "b" else PozycjaOsobista.ustawienia_czarnych
+	for ustawienie in ustawienia:
+		if ustawienie[0] == "K":
+			return true
+	return false
+
+func can_place(typ: String) -> bool:
+	var current_points = oblicz_punkty(kolor_posuniecia)
+	var piece_points = wartosci_figur.get(typ, 0)
+	if current_points + piece_points > MAX_PUNKTY:
+		$dzwiek/zakaz.play()
+		return false
+	return true
 
 func najechana_figura():
 	for figura in figury:
@@ -43,17 +145,6 @@ func chwyc(figura):
 	chwycona = figura
 	poczatkowe_pole = plansza.local_to_map(chwycona.global_position)
 	chwycona.top_level = true
-
-func _process(_delta: float) -> void:
-	#get_tree().change_scene_to_file("res://scenes/main.tscn")
-	var wskazane_pole = plansza.local_to_map(get_global_mouse_position())
-	#match stan:
-		#stany.IDLE:
-			#stan_idle(wskazane_pole)
-		#stany.GRAB:
-			#stan_grab(wskazane_pole)
-		#stany.SELECT:
-			#stan_select(wskazane_pole)
 
 func stan_idle(wskazane_pole):
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
@@ -113,37 +204,6 @@ func generacja_pol(x,y,width,height):
 		for h in range(y,height+1):
 			dostepne_pola.append(Vector2i(w, h))
 
-
-func _submitted(new_text: String) -> void:
-	var operacja = sprawdzanie_tekstu(new_text)
-	if operacja != null and Vector2i(operacja[1], operacja[2]) in dostepne_pola:
-		dodaj(operacja[0], kolor_posuniecia, Vector2i(operacja[1],operacja[2]))
-		if kolor_posuniecia == "b":
-			PozycjaOsobista.ustawienia_bialych.append([operacja[0], Vector2i(operacja[1],operacja[2])])
-		else:
-			PozycjaOsobista.ustawienia_czarnych.append([operacja[0], Vector2i(operacja[1],operacja[2])])
-	print(PozycjaOsobista.ustawienia_bialych)
-	$LineEdit.text = ""
-	$LineEdit.editable = true
-
-func sprawdzanie_tekstu(tekst):
-	var figura = ""
-	var x = null
-	var y = null
-	for litera in tekst:
-		#if figura != "" and x and y:
-			#return [figura.to_upper(),x,y]
-		if litera.to_upper() in wartosci_figur:
-			figura = litera
-		elif int(litera) != 0:
-			if not x:
-				x = litera
-			else:
-				y = litera
-	if x and y and figura != "":
-		return [figura.to_upper(),int(x),int(y)]
-		
-
 func reset():
 	for figura in figury:
 		figura.queue_free()
@@ -152,9 +212,13 @@ func reset():
 func _on_reset_pressed() -> void:
 	reset()
 	PozycjaOsobista.ustawienia_bialych.clear()
+	PozycjaOsobista.ustawienia_czarnych.clear()
 
 
 func _on_menu_pressed() -> void:
+	if not ma_krola("b") or not ma_krola("c"):
+		$dzwiek/zakaz.play()
+		return
 	get_tree().change_scene_to_file("res://scenes/menu glowne.tscn")
 
 
@@ -173,3 +237,4 @@ func synchronizacja():
 	else:
 		for figura in PozycjaOsobista.ustawienia_czarnych:
 			dodaj(figura[0], "c", figura[1])
+	$PieceMenu.create_menu()

@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=4 uid="uid://dmvanlwksdhiy"]
+[gd_scene load_steps=12 format=4 uid="uid://dmvanlwksdhiy"]
 
 [ext_resource type="Script" uid="uid://ddmalo4rblxqw" path="res://scripts/ustawianie.gd" id="1_5fy12"]
 [ext_resource type="Texture2D" uid="uid://dwqv0mmgsskxp" path="res://assets/board.png" id="2_hn1u7"]
@@ -7,6 +7,7 @@
 [ext_resource type="AudioStream" uid="uid://c3mnxd6wpwosp" path="res://audio/check.mp3" id="5_3p4wu"]
 [ext_resource type="AudioStream" uid="uid://biu1ligyvf2xr" path="res://audio/nope.mp3" id="6_yvm7y"]
 [ext_resource type="AudioStream" uid="uid://dhyk785va0i38" path="res://audio/woof_2.mp3" id="7_gtpla"]
+[ext_resource type="PackedScene" uid="uid://piecemenu01" path="res://scenes/piece_menu.tscn" id="8_menu"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_hntit"]
 texture = ExtResource("2_hn1u7")
@@ -118,12 +119,6 @@ volume_db = -16.0
 stream = ExtResource("7_gtpla")
 volume_db = -16.0
 
-[node name="LineEdit" type="LineEdit" parent="."]
-offset_left = 66.0
-offset_top = 142.0
-offset_right = 439.0
-offset_bottom = 192.0
-
 [node name="Reset" type="Button" parent="."]
 offset_left = 93.0
 offset_top = 42.0
@@ -145,7 +140,26 @@ offset_right = 312.0
 offset_bottom = 126.0
 text = "zmiana"
 
-[connection signal="text_submitted" from="LineEdit" to="." method="_submitted"]
+[node name="PieceMenu" parent="." instance=ExtResource("8_menu")]
+
+[node name="ProgressBar" type="ProgressBar" parent="."]
+offset_left = 10.0
+offset_top = 430.0
+offset_right = 502.0
+offset_bottom = 448.0
+max_value = 16.0
+value = 0.0
+show_percentage = false
+
+[node name="PunktyLabel" type="Label" parent="."]
+offset_left = 220.0
+offset_top = 432.0
+offset_right = 292.0
+offset_bottom = 448.0
+horizontal_alignment = 1
+text = "0/16"
+
 [connection signal="pressed" from="Reset" to="." method="_on_reset_pressed"]
 [connection signal="pressed" from="menu" to="." method="_on_menu_pressed"]
 [connection signal="pressed" from="zmiana_kolorow" to="." method="_on_zmiana_kolorow_pressed"]
+[connection signal="piece_selected" from="PieceMenu" to="." method="_on_piece_selected"]

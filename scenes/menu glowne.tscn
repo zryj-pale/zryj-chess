@@ -57,4 +57,14 @@ text = "ustawianie pozycji"
 
 [connection signal="pressed" from="robcza" to="." method="_on_robcza_pressed"]
 [connection signal="finished" from="VideoStreamPlayer" to="." method="_on_video_stream_player_finished"]
+[node name="Online" type="Button" parent="."]
+z_index = 4
+layout_mode = 0
+offset_left = 150.0
+offset_top = 300.0
+offset_right = 350.0
+offset_bottom = 340.0
+text = "Online"
+
 [connection signal="pressed" from="ustawianie" to="." method="_on_ustawianie_pressed"]
+[connection signal="pressed" from="Online" to="." method="_on_online_pressed"]

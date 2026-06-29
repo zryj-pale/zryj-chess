@@ -1,0 +1,11 @@
+[gd_scene format=4 uid="uid://piecemenu01"]
+
+[ext_resource type="Script" path="res://scripts/piece_menu.gd" id="1_menu"]
+
+[node name="PieceMenu" type="HBoxContainer"]
+offset_left = 0.0
+offset_top = 452.0
+offset_right = 512.0
+offset_bottom = 512.0
+grow_horizontal = 2
+script = ExtResource("1_menu")
