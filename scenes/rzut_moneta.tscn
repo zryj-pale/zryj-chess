@@ -1,11 +1,11 @@
-[gd_scene load_steps=27 format=3 uid="uid://x0yj01dee5qm"]
+[gd_scene format=3 uid="uid://x0yj01dee5qm"]
 
 [ext_resource type="Script" uid="uid://dj562m7fu54k6" path="res://scripts/rzut_moneta.gd" id="1_bqhu5"]
 [ext_resource type="Texture2D" uid="uid://bbxbvjf1hidus" path="res://assets/charlie.jpg" id="1_t57vo"]
 [ext_resource type="Script" uid="uid://0xatgahuujp5" path="res://scripts/camera_3d.gd" id="2_ujnwo"]
 [ext_resource type="PackedScene" uid="uid://dms1r8hvjq1qo" path="res://assets/moneta.glb" id="3_8vsv8"]
 [ext_resource type="Script" uid="uid://dyffyfgahbw3m" path="res://scripts/moneta.gd" id="4_7nigk"]
-[ext_resource type="Texture2D" uid="uid://dyrp2pl872e3x" path="res://assets/tekstura.jpg" id="4_eqr5e"]
+[ext_resource type="Texture2D" uid="uid://dyrp2pl872e3x" path="res://assets/niggers.jpg" id="4_eqr5e"]
 [ext_resource type="Script" uid="uid://dyguh5kv6taet" path="res://scripts/lampa.gd" id="6_g05c4"]
 [ext_resource type="AudioStream" uid="uid://bhep1gr0xqoj4" path="res://audio/bruno phonk.wav" id="6_memf5"]
 [ext_resource type="Script" uid="uid://b5w8u5n202anu" path="res://scripts/tekst.gd" id="7_omxad"]
