@@ -20,3 +20,7 @@ func _on_video_stream_player_finished() -> void:
 
 func _on_ustawianie_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/ustawianie.tscn")
+
+
+func _on_online_pressed() -> void:
+	get_tree().change_scene_to_file("res://scenes/lobby.tscn")

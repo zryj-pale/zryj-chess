@@ -1,13 +1,14 @@
 extends Node2D
 
 @onready var plansza = $TileMapLayer
-@export var dodawanie_pol = false
+@export var dodawanie_pol = true
 
 
 enum stany{
 	IDLE,
 	GRAB,
-	SELECT
+	SELECT,
+	PLACEMENT
 }
 var stan := stany.IDLE
 
@@ -22,20 +23,50 @@ const KOLORY_ZNACZNIKOW = {
 	1:Color(1.0, 1.0, 0.0, 1.0)
 }
 var wybrana = null
+var bialy_tiles = 2
+var czarny_tiles = 2
+var w_trakcie_rzucania = false
+var _prev_mouse_pressed = false
+var my_color = ""
 
 const OKNO = preload("uid://dcnl4l5bu5ucc")
 const ZNACZNIK = preload("uid://bug72ag1gmt76")
 
 func _ready() -> void:
+	add_to_group("game_main")
 	generacja_pol(6)
-	domyslne_ustawienie()
-	losowanie()
-	ustawienie_z_pozycji()
+	if NetworkManager.player_id > 0:
+		my_color = "b" if NetworkManager.is_host else "c"
+		NetworkManager.move_received.connect(_on_network_move)
+		NetworkManager.player_disconnected.connect(_on_player_disconnected)
+		ustawienie_z_pozycji()
+		if NetworkManager.is_host:
+			kolor_posuniecia = "b"
+		else:
+			kolor_posuniecia = "b"
+		$dzwiek/muzyka w tle".play()
+	else:
+		losowanie()
+		ustawienie_z_pozycji()
+
+func _on_network_move(from: Vector2i, to: Vector2i):
+	var figura = null
+	for f in figury:
+		if plansza.local_to_map(f.global_position) == from and f.kolor == kolor_posuniecia:
+			figura = f
+			break
+	if figura:
+		ruch(figura, to)
+
+func _on_player_disconnected():
+	get_tree().change_scene_to_file("res://scenes/menu glowne.tscn")
 
 func ustawienie_z_pozycji():
-	var ustawienie = PozycjaOsobista.ustawienia_bialych
-	for figura in ustawienie:
+	for figura in PozycjaOsobista.ustawienia_bialych:
 		dodaj(figura[0], "b", figura[1])
+	for figura in PozycjaOsobista.ustawienia_czarnych:
+		var pole = Vector2i(figura[1].x, 7 - figura[1].y)
+		dodaj(figura[0], "c", pole)
 	
 
 func najechana_figura():
@@ -58,12 +89,42 @@ func _process(_delta: float) -> void:
 			stan_grab(wskazane_pole)
 		stany.SELECT:
 			stan_select(wskazane_pole)
+		stany.PLACEMENT:
+			stan_placement(wskazane_pole)
 
 func stan_idle(wskazane_pole):
+	if NetworkManager.player_id > 0 and kolor_posuniecia != my_color:
+		return
+	if Input.is_action_just_pressed("space"):
+		var tiles_left = bialy_tiles if kolor_posuniecia == "b" else czarny_tiles
+		if tiles_left > 0:
+			w_trakcie_rzucania = true
+			stan = stany.PLACEMENT
+			return
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		if najechana_figura()and najechana_figura().kolor == kolor_posuniecia:
 			chwyc(najechana_figura())
 			stan = stany.GRAB
+
+func stan_placement(wskazane_pole):
+	if Input.is_action_just_pressed("space"):
+		w_trakcie_rzucania = false
+		stan = stany.IDLE
+		return
+	var mouse_pressed = Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	if mouse_pressed and not _prev_mouse_pressed:
+		if not pole_na_planszy(wskazane_pole):
+			dodaj_pole(wskazane_pole)
+			if kolor_posuniecia == "b":
+				bialy_tiles -= 1
+			else:
+				czarny_tiles -= 1
+			w_trakcie_rzucania = false
+			stan = stany.IDLE
+			$dzwiek/ruch.play()
+		else:
+			$dzwiek/zakaz.play()
+	_prev_mouse_pressed = mouse_pressed
 
 func stan_grab(wskazane_pole):
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
@@ -105,14 +166,16 @@ func moze_ruszyc(figura, _poczatkowe_pole, docelowe_pole):
 	return false
 	
 func _input(_event: InputEvent) -> void:
-	if Input.is_action_just_pressed("space"):
-		if dodawanie_pol == true:
-			dodaj_pole(plansza.local_to_map(get_global_mouse_position()))
+	pass
 	
 func pozycja(figura):
 	return plansza.local_to_map(figura.global_position)
 
 func ruch(figura, pole:Vector2i):
+	if NetworkManager.player_id > 0 and figura.kolor != my_color:
+		return
+	if NetworkManager.player_id > 0:
+		NetworkManager.submit_move(plansza.local_to_map(figura.global_position), pole)
 	koniec_tury()
 	if stoi_figura(pole) != null:
 		zbicie(stoi_figura(pole))
@@ -157,13 +220,15 @@ func generacja_pol(rozmiar:int):
 			dostepne_pola.append(Vector2i(x, y))
 
 func dodaj_pole(pole:Vector2i):
-	if pole[0] in range(0,8) and pole[1] in range(0,8):
-		if pole in dostepne_pola:
-			return 0
+	if pole[0] < 0 or pole[0] > 7 or pole[1] < 0 or pole[1] > 7:
+		return
+	if pole in dostepne_pola:
+		return
 	plansza.set_cell(pole, 0, pole)
 	dostepne_pola.append(pole)
 
 func koniec_tury():
+	w_trakcie_rzucania = false
 	if kolor_posuniecia == "b":
 		kolor_posuniecia = "c"
 	else:
