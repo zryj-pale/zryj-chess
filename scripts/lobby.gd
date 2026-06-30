@@ -45,15 +45,17 @@ func _on_join_pressed():
 
 func _on_player_connected():
 	if NetworkManager.is_host:
-		status_label.text = "Opponent connected!\nStarting game..."
-		var white_pieces = PozycjaOsobista.ustawienia_bialych.duplicate()
-		var black_pieces = PozycjaOsobista.ustawienia_czarnych.duplicate()
-		NetworkManager.start_game(white_pieces, black_pieces)
-		get_tree().change_scene_to_file("res://scenes/main.tscn")
+		status_label.text = "Opponent connected!\nFlipping coin...\n\nBoth players will use the host's piece positions."
+		NetworkManager.set_my_positions(PozycjaOsobista.ustawienia_bialych, PozycjaOsobista.ustawienia_czarnych)
+		NetworkManager.start_game()
 	else:
-		status_label.text = "Connected! Waiting for host to start..."
+		status_label.text = "Connected! Sending your positions to host..."
+		NetworkManager.set_my_positions(PozycjaOsobista.ustawienia_bialych, PozycjaOsobista.ustawienia_czarnych)
+		NetworkManager.start_game()
 
-func _on_game_started():
+func _on_game_started(white_pieces: Array, black_pieces: Array, host_is_white: bool):
+	PozycjaOsobista.ustawienia_bialych = white_pieces
+	PozycjaOsobista.ustawienia_czarnych = black_pieces
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
 func _on_back_pressed():

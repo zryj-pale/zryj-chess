@@ -36,15 +36,15 @@ func _ready() -> void:
 	add_to_group("game_main")
 	generacja_pol(6)
 	if NetworkManager.player_id > 0:
-		my_color = "b" if NetworkManager.is_host else "c"
+		if NetworkManager.host_is_white:
+			my_color = "b" if NetworkManager.is_host else "c"
+		else:
+			my_color = "c" if NetworkManager.is_host else "b"
 		NetworkManager.move_received.connect(_on_network_move)
 		NetworkManager.player_disconnected.connect(_on_player_disconnected)
 		ustawienie_z_pozycji()
-		if NetworkManager.is_host:
-			kolor_posuniecia = "b"
-		else:
-			kolor_posuniecia = "b"
-		$dzwiek/muzyka w tle".play()
+		kolor_posuniecia = "b"
+		$HUD/ZmianaButton.visible = false
 	else:
 		losowanie()
 		ustawienie_z_pozycji()
