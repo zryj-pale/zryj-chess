@@ -1,5 +1,7 @@
 extends Control
 
+const OKNO = preload("uid://dcnl4l5bu5ucc")
+
 @onready var host_port = $VBoxContainer/HostSection/PortInput
 @onready var host_button = $VBoxContainer/HostSection/HostButton
 @onready var join_ip = $VBoxContainer/JoinSection/IPInput
@@ -8,11 +10,14 @@ extends Control
 @onready var status_label = $StatusLabel
 @onready var back_button = $BackButton
 
+var coinflip_done = false
+
 func _ready():
 	host_button.pressed.connect(_on_host_pressed)
 	join_button.pressed.connect(_on_join_pressed)
 	back_button.pressed.connect(_on_back_pressed)
 	NetworkManager.player_connected.connect(_on_player_connected)
+	NetworkManager.coinflip_received.connect(_on_coinflip_received)
 	NetworkManager.game_started.connect(_on_game_started)
 
 func _on_host_pressed():
@@ -44,14 +49,25 @@ func _on_join_pressed():
 		status_label.text = "Failed to connect: " + str(err) + "\n\nMake sure:\n- IP and port are correct\n- Host is running and reachable\n- No firewall is blocking the connection"
 
 func _on_player_connected():
+	NetworkManager.set_my_positions(PozycjaOsobista.ustawienia_bialych, PozycjaOsobista.ustawienia_czarnych)
 	if NetworkManager.is_host:
-		status_label.text = "Opponent connected!\nFlipping coin...\n\nBoth players will use the host's piece positions."
-		NetworkManager.set_my_positions(PozycjaOsobista.ustawienia_bialych, PozycjaOsobista.ustawienia_czarnych)
-		NetworkManager.start_game()
+		status_label.text = "Opponent connected!\nFlipping coin to decide who plays white..."
+		start_coinflip()
 	else:
-		status_label.text = "Connected! Sending your positions to host..."
-		NetworkManager.set_my_positions(PozycjaOsobista.ustawienia_bialych, PozycjaOsobista.ustawienia_czarnych)
-		NetworkManager.start_game()
+		status_label.text = "Connected! Waiting for host to flip the coin..."
+
+func start_coinflip():
+	var okno = OKNO.instantiate()
+	okno.global_position = Vector2.ZERO
+	okno.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(okno)
+	await okno.koniec_rzutu
+	NetworkManager.broadcast_coinflip(okno.wyrzucona)
+
+func _on_coinflip_received(result: String):
+	if not NetworkManager.is_host:
+		status_label.text = "Coin flip: " + result + "\nStarting game..."
+	NetworkManager.start_game()
 
 func _on_game_started(white_pieces: Array, black_pieces: Array, host_is_white: bool):
 	PozycjaOsobista.ustawienia_bialych = white_pieces

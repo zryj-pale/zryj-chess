@@ -4,7 +4,7 @@ signal player_connected
 signal player_disconnected
 signal game_started(white_pieces: Array, black_pieces: Array, host_is_white: bool)
 signal move_received(from: Vector2i, to: Vector2i)
-signal positions_received(white_pieces: Array, black_pieces: Array)
+signal coinflip_received(result: String)
 
 var peer = null
 var is_host = false
@@ -13,8 +13,6 @@ var upnp = null
 
 var my_white_pieces = []
 var my_black_pieces = []
-var opponent_white_pieces = []
-var opponent_black_pieces = []
 var host_is_white = true
 
 func host_game(port: int = 7777):
@@ -65,8 +63,6 @@ func close_connection():
 	player_id = 0
 	my_white_pieces = []
 	my_black_pieces = []
-	opponent_white_pieces = []
-	opponent_black_pieces = []
 	if multiplayer.peer_connected.is_connected(_on_peer_connected):
 		multiplayer.peer_connected.disconnect(_on_peer_connected)
 	if multiplayer.peer_disconnected.is_connected(_on_peer_disconnected):
@@ -85,18 +81,24 @@ func _on_connected_to_server():
 func _on_peer_disconnected(id: int):
 	player_disconnected.emit()
 
-@rpc("any_peer", "call_remote", "reliable")
-func send_positions(white_pieces: Array, black_pieces: Array):
-	if is_host:
-		opponent_white_pieces = white_pieces
-		opponent_black_pieces = black_pieces
-		host_is_white = randi() % 2 == 0
-		var final_white = my_white_pieces if host_is_white else opponent_white_pieces
-		var final_black = opponent_black_pieces if host_is_white else my_black_pieces
-		sync_game_start.rpc(final_white, final_black, host_is_white)
+func set_my_positions(white_pieces: Array, black_pieces: Array):
+	my_white_pieces = white_pieces
+	my_black_pieces = black_pieces
+
+@rpc("authority", "call_remote", "reliable")
+func sync_coinflip_result(result: String):
+	if result == "orzel":
+		host_is_white = true
 	else:
-		opponent_white_pieces = white_pieces
-		opponent_black_pieces = black_pieces
+		host_is_white = false
+	coinflip_received.emit(result)
+
+func broadcast_coinflip(result: String):
+	if result == "orzel":
+		host_is_white = true
+	else:
+		host_is_white = false
+	sync_coinflip_result.rpc(result)
 
 @rpc("authority", "call_remote", "reliable")
 func sync_game_start(white_pieces: Array, black_pieces: Array, _host_is_white: bool):
@@ -107,15 +109,10 @@ func sync_game_start(white_pieces: Array, black_pieces: Array, _host_is_white: b
 func send_move(from: Vector2i, to: Vector2i):
 	move_received.emit(from, to)
 
-func set_my_positions(white_pieces: Array, black_pieces: Array):
-	my_white_pieces = white_pieces
-	my_black_pieces = black_pieces
-
 func start_game():
-	if is_host:
-		send_positions.rpc(my_white_pieces, my_black_pieces)
-	else:
-		send_positions.rpc_id(1, my_white_pieces, my_black_pieces)
+	var final_white = my_white_pieces if host_is_white else my_black_pieces
+	var final_black = my_black_pieces if host_is_white else my_white_pieces
+	sync_game_start.rpc(final_white, final_black, host_is_white)
 
 func submit_move(from: Vector2i, to: Vector2i):
 	if is_host:
