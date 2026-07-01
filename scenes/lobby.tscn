@@ -16,19 +16,38 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -150.0
-offset_top = -100.0
-offset_right = 150.0
-offset_bottom = 100.0
+offset_left = -200.0
+offset_top = -180.0
+offset_right = 200.0
+offset_bottom = 180.0
 grow_horizontal = 2
 grow_vertical = 2
+
+[node name="MatchmakingSection" type="VBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="MatchmakingLabel" type="Label" parent="VBoxContainer/MatchmakingSection"]
+layout_mode = 2
+text = "Quick Match"
+horizontal_alignment = 1
+
+[node name="RoomInput" type="LineEdit" parent="VBoxContainer/MatchmakingSection"]
+layout_mode = 2
+placeholder_text = "Room Name"
+
+[node name="FindMatchButton" type="Button" parent="VBoxContainer/MatchmakingSection"]
+layout_mode = 2
+text = "Find Match"
+
+[node name="Separator1" type="HSeparator" parent="VBoxContainer"]
+layout_mode = 2
 
 [node name="HostSection" type="VBoxContainer" parent="VBoxContainer"]
 layout_mode = 2
 
 [node name="HostLabel" type="Label" parent="VBoxContainer/HostSection"]
 layout_mode = 2
-text = "Host Game"
+text = "Direct Connect - Host"
 horizontal_alignment = 1
 
 [node name="PortInput" type="LineEdit" parent="VBoxContainer/HostSection"]
@@ -45,7 +64,7 @@ layout_mode = 2
 
 [node name="JoinLabel" type="Label" parent="VBoxContainer/JoinSection"]
 layout_mode = 2
-text = "Join Game"
+text = "Direct Connect - Join"
 horizontal_alignment = 1
 
 [node name="IPInput" type="LineEdit" parent="VBoxContainer/JoinSection"]
