@@ -1,121 +1,287 @@
 extends Node
 
+# Relay-only networking for zryj chess.
+# Replaces the old ENet-based network_manager.gd AND matchmaking_client.gd.
+# All traffic (matchmaking + gameplay) goes through relay_server.py on the
+# VPS. There is no direct P2P connection between players -- the server
+# always forwards messages between the two players in a room.
+
+# --- Public signals kept identical to the old NetworkManager, so main.gd
+# and hud.gd need no changes. ---
 signal player_connected
 signal player_disconnected
 signal game_started(white_pieces: Array, black_pieces: Array, host_is_white: bool)
 signal move_received(from: Vector2i, to: Vector2i)
 signal coinflip_received(result: String)
 
-var peer = null
-var is_host = false
-var player_id = 0
-var upnp = null
+# --- Matchmaking-flavored signals kept identical to the old
+# MatchmakingClient, so lobby.gd's existing handlers mostly still work.
+# NOTE: mm_match_found no longer carries an ip/port (nothing to connect
+# to -- everything goes through the relay). If lobby.gd's handler reads
+# those args, drop them; player_connected fires right after this and is
+# the real "we're ready to play" signal now. ---
+signal mm_match_waiting
+signal mm_match_found
+signal mm_match_cancelled
+signal mm_match_timeout
+signal mm_match_full
 
-var my_white_pieces = []
-var my_black_pieces = []
-var host_is_white = true
+# --- Connection / role state ---
+var socket := PacketPeerUDP.new()
+var server_address := ""
+var server_port := 5000
+var connected_to_relay := false
 
-func host_game(port: int = 7777):
-	close_connection()
-	peer = ENetMultiplayerPeer.new()
-	var err = peer.create_server(port, 1)
-	if err != OK:
-		peer = null
-		return err
-	multiplayer.multiplayer_peer = peer
-	is_host = true
-	player_id = 1
-	multiplayer.peer_connected.connect(_on_peer_connected)
-	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
-	setup_upnp(port)
-	return OK
+var room_name := ""
+var is_searching := false
+var is_host := false
+var player_id := 0  # 1 = host/authority, 2 = joining player, matches old semantics
 
-func setup_upnp(port: int):
-	upnp = UPNP.new()
-	var discover_result = upnp.discover()
-	if discover_result == UPNP.UPNP_RESULT_SUCCESS:
-		upnp.add_port_mapping(port, port, "zryj chess", "UDP")
-		upnp.add_port_mapping(port, port, "zryj chess", "TCP")
+var my_white_pieces: Array = []
+var my_black_pieces: Array = []
+var host_is_white := true
 
-func join_game(ip: String, port: int = 7777):
-	close_connection()
-	peer = ENetMultiplayerPeer.new()
-	var err = peer.create_client(ip, port)
-	if err != OK:
-		peer = null
-		return err
-	multiplayer.multiplayer_peer = peer
-	is_host = false
-	player_id = 2
-	multiplayer.connected_to_server.connect(_on_connected_to_server)
-	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
-	return OK
+# --- Reliability layer (ack + retry over the unreliable relay) ---
+const RESEND_INTERVAL := 0.3
+const MAX_RETRIES := 25
+const SEEN_SEQ_HISTORY := 64
 
-func close_connection():
-	if upnp:
-		upnp.clear_port_mappings()
-		upnp = null
-	if peer:
-		peer.close()
-		peer = null
-	multiplayer.multiplayer_peer = null
+var _out_seq := 0
+var _pending: Dictionary = {}       # seq -> {payload_str, elapsed, retries}
+var _seen_in_seqs: Array = []       # recently processed incoming seqs (dedupe)
+
+var _ping_timer: Timer = null
+
+
+func _ready() -> void:
+	set_process(true)
+
+
+# ---------------------------------------------------------------------
+# Connection lifecycle
+# ---------------------------------------------------------------------
+
+func connect_to_server(address: String, port: int = 5000) -> void:
+	server_address = address
+	server_port = port
+	socket.connect_to_host(address, port)
+	connected_to_relay = true
+	_ensure_ping_timer()
+
+
+func join_room(room: String) -> void:
+	if not connected_to_relay:
+		return
+	room_name = room
+	is_searching = true
+	socket.put_packet(("JOIN:%s" % room).to_utf8_buffer())
+
+
+func leave_room(room: String) -> void:
+	is_searching = false
+	if connected_to_relay:
+		socket.put_packet(("LEAVE:%s" % room).to_utf8_buffer())
+	_reset_room_state()
+
+
+func cancel() -> void:
+	is_searching = false
+	if room_name != "":
+		leave_room(room_name)
+	_reset_room_state()
+
+
+func close_connection() -> void:
+	if room_name != "":
+		socket.put_packet(("LEAVE:%s" % room_name).to_utf8_buffer())
+	_reset_room_state()
+	connected_to_relay = false
+	if _ping_timer:
+		_ping_timer.stop()
+
+
+func _reset_room_state() -> void:
+	room_name = ""
 	is_host = false
 	player_id = 0
 	my_white_pieces = []
 	my_black_pieces = []
-	if multiplayer.peer_connected.is_connected(_on_peer_connected):
-		multiplayer.peer_connected.disconnect(_on_peer_connected)
-	if multiplayer.peer_disconnected.is_connected(_on_peer_disconnected):
-		multiplayer.peer_disconnected.disconnect(_on_peer_disconnected)
-	if multiplayer.connected_to_server.is_connected(_on_connected_to_server):
-		multiplayer.connected_to_server.disconnect(_on_connected_to_server)
+	_pending.clear()
+	_seen_in_seqs.clear()
+	_out_seq = 0
 
-func _on_peer_connected(id: int):
-	player_id = id
-	player_connected.emit()
 
-func _on_connected_to_server():
-	player_id = 1
-	player_connected.emit()
+# ---------------------------------------------------------------------
+# Game API -- same method names/signatures as the old NetworkManager
+# ---------------------------------------------------------------------
 
-func _on_peer_disconnected(id: int):
-	player_disconnected.emit()
-
-func set_my_positions(white_pieces: Array, black_pieces: Array):
+func set_my_positions(white_pieces: Array, black_pieces: Array) -> void:
 	my_white_pieces = white_pieces
 	my_black_pieces = black_pieces
 
-@rpc("authority", "call_remote", "reliable")
-func sync_coinflip_result(result: String):
-	if result == "orzel":
-		host_is_white = true
-	else:
-		host_is_white = false
-	coinflip_received.emit(result)
 
-func broadcast_coinflip(result: String):
-	if result == "orzel":
-		host_is_white = true
-	else:
-		host_is_white = false
-	sync_coinflip_result.rpc(result)
+func broadcast_coinflip(result: String) -> void:
+	host_is_white = (result == "orzel")
+	_send_reliable("coinflip", {"result": result})
 
-@rpc("authority", "call_remote", "reliable")
-func sync_game_start(white_pieces: Array, black_pieces: Array, _host_is_white: bool):
-	host_is_white = _host_is_white
-	game_started.emit(white_pieces, black_pieces, host_is_white)
 
-@rpc("any_peer", "call_remote", "reliable")
-func send_move(from: Vector2i, to: Vector2i):
-	move_received.emit(from, to)
-
-func start_game():
+func start_game() -> void:
 	var final_white = my_white_pieces if host_is_white else my_black_pieces
 	var final_black = my_black_pieces if host_is_white else my_white_pieces
-	sync_game_start.rpc(final_white, final_black, host_is_white)
+	_send_reliable("game_start", {
+		"white": final_white,
+		"black": final_black,
+		"host_is_white": host_is_white,
+	})
 
-func submit_move(from: Vector2i, to: Vector2i):
-	if is_host:
-		send_move.rpc(from, to)
-	else:
-		send_move.rpc_id(1, from, to)
+
+func submit_move(from: Vector2i, to: Vector2i) -> void:
+	_send_reliable("move", {
+		"from": [from.x, from.y],
+		"to": [to.x, to.y],
+	})
+
+
+# ---------------------------------------------------------------------
+# Reliable-send layer
+# ---------------------------------------------------------------------
+
+func _send_reliable(type: String, data: Dictionary) -> void:
+	_out_seq += 1
+	var envelope = {"seq": _out_seq, "kind": "data", "type": type, "data": data}
+	var payload_str = JSON.stringify(envelope)
+	_pending[_out_seq] = {"payload": payload_str, "elapsed": 0.0, "retries": 0}
+	_send_raw(payload_str)
+
+
+func _send_ack(seq: int) -> void:
+	var envelope = {"seq": seq, "kind": "ack"}
+	_send_raw(JSON.stringify(envelope))
+
+
+func _send_raw(payload_str: String) -> void:
+	if room_name == "":
+		return
+	socket.put_packet(("DATA:%s:%s" % [room_name, payload_str]).to_utf8_buffer())
+
+
+# ---------------------------------------------------------------------
+# Per-frame: drain socket, retry unacked sends
+# ---------------------------------------------------------------------
+
+func _process(delta: float) -> void:
+	if not connected_to_relay:
+		return
+
+	while socket.get_available_packet_count() > 0:
+		var packet = socket.get_packet()
+		_handle_message(packet.get_string_from_utf8().strip_edges())
+
+	if _pending.is_empty():
+		return
+	var to_drop: Array = []
+	for seq in _pending.keys():
+		var entry = _pending[seq]
+		entry["elapsed"] += delta
+		if entry["elapsed"] >= RESEND_INTERVAL:
+			entry["elapsed"] = 0.0
+			entry["retries"] += 1
+			if entry["retries"] > MAX_RETRIES:
+				to_drop.append(seq)
+			else:
+				_send_raw(entry["payload"])
+	for seq in to_drop:
+		_pending.erase(seq)
+		push_warning("zryj-net: gave up delivering message seq=%d -- connection likely lost" % seq)
+		player_disconnected.emit()
+
+
+# ---------------------------------------------------------------------
+# Incoming message handling
+# ---------------------------------------------------------------------
+
+func _handle_message(message: String) -> void:
+	if message == "WAITING":
+		mm_match_waiting.emit()
+
+	elif message.begins_with("MATCHED:"):
+		var role = int(message.substr(len("MATCHED:")))
+		player_id = role
+		is_host = (role == 1)
+		is_searching = false
+		mm_match_found.emit()
+		player_connected.emit()
+
+	elif message == "FULL":
+		is_searching = false
+		mm_match_full.emit()
+
+	elif message == "ALREADY_IN":
+		pass
+
+	elif message == "CANCEL":
+		is_searching = false
+		mm_match_cancelled.emit()
+		player_disconnected.emit()
+
+	elif message == "TIMEOUT":
+		is_searching = false
+		mm_match_timeout.emit()
+
+	elif message.begins_with("DATA:"):
+		_handle_data(message.substr(len("DATA:")))
+
+
+func _handle_data(payload_str: String) -> void:
+	var parsed = JSON.parse_string(payload_str)
+	if parsed == null or typeof(parsed) != TYPE_DICTIONARY:
+		return
+
+	if parsed.get("kind") == "ack":
+		var seq = int(parsed.get("seq", -1))
+		_pending.erase(seq)
+		return
+
+	if parsed.get("kind") != "data":
+		return
+
+	var seq = int(parsed.get("seq", -1))
+	_send_ack(seq)  # always ack, even duplicates, in case our earlier ack was lost
+
+	if _seen_in_seqs.has(seq):
+		return  # already processed this one, don't double-dispatch
+	_seen_in_seqs.append(seq)
+	if _seen_in_seqs.size() > SEEN_SEQ_HISTORY:
+		_seen_in_seqs.pop_front()
+
+	var type = parsed.get("type", "")
+	var data = parsed.get("data", {})
+
+	match type:
+		"coinflip":
+			host_is_white = (data.get("result") == "orzel")
+			coinflip_received.emit(data.get("result"))
+		"game_start":
+			game_started.emit(data.get("white", []), data.get("black", []), data.get("host_is_white", true))
+		"move":
+			var f = data.get("from", [0, 0])
+			var t = data.get("to", [0, 0])
+			move_received.emit(Vector2i(f[0], f[1]), Vector2i(t[0], t[1]))
+
+
+# ---------------------------------------------------------------------
+# Keepalive so the relay (and any NAT mapping) doesn't time us out
+# ---------------------------------------------------------------------
+
+func _ensure_ping_timer() -> void:
+	if _ping_timer:
+		return
+	_ping_timer = Timer.new()
+	_ping_timer.wait_time = 5.0
+	_ping_timer.one_shot = false
+	_ping_timer.timeout.connect(func():
+		if connected_to_relay:
+			socket.put_packet("PING".to_utf8_buffer())
+	)
+	add_child(_ping_timer)
+	_ping_timer.start()

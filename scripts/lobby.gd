@@ -2,6 +2,9 @@ extends Control
 
 const OKNO = preload("uid://dcnl4l5bu5ucc")
 
+const RELAY_SERVER_IP = "31.70.109.158"
+const RELAY_SERVER_PORT = 5000
+
 @onready var host_port = $VBoxContainer/HostSection/PortInput
 @onready var host_button = $VBoxContainer/HostSection/HostButton
 @onready var join_ip = $VBoxContainer/JoinSection/IPInput
@@ -12,47 +15,38 @@ const OKNO = preload("uid://dcnl4l5bu5ucc")
 @onready var room_input = $VBoxContainer/MatchmakingSection/RoomInput
 @onready var find_match_button = $VBoxContainer/MatchmakingSection/FindMatchButton
 
-var matchmaking = null
 var current_room = ""
 
 func _ready():
+	# Direct host-by-port / join-by-IP relied on ENet + UPnP/manual port
+	# forwarding, which we've dropped in favor of relay-only networking.
+	# Left in place (disabled) rather than ripped out, in case you want to
+	# revive a direct-connect path later for LAN play.
+	host_button.disabled = true
+	join_button.disabled = true
 	host_button.pressed.connect(_on_host_pressed)
 	join_button.pressed.connect(_on_join_pressed)
+
 	back_button.pressed.connect(_on_back_pressed)
 	find_match_button.pressed.connect(_on_find_match_pressed)
+
 	NetworkManager.player_connected.connect(_on_player_connected)
+	NetworkManager.player_disconnected.connect(_on_player_disconnected)
 	NetworkManager.coinflip_received.connect(_on_coinflip_received)
 	NetworkManager.game_started.connect(_on_game_started)
+	NetworkManager.mm_match_waiting.connect(_on_match_waiting)
+	NetworkManager.mm_match_found.connect(_on_match_found)
+	NetworkManager.mm_match_cancelled.connect(_on_match_cancelled)
+	NetworkManager.mm_match_timeout.connect(_on_match_timeout)
+	NetworkManager.mm_match_full.connect(_on_match_full)
+
+	NetworkManager.connect_to_server(RELAY_SERVER_IP, RELAY_SERVER_PORT)
 
 func _on_host_pressed():
-	var port = int(host_port.text) if host_port.text != "" else 7777
-	var err = NetworkManager.host_game(port)
-	if err == OK:
-		var addresses = IP.get_local_addresses()
-		var ip_text = "localhost"
-		for addr in addresses:
-			if addr.begins_with("192.168.") or addr.begins_with("10.") or addr.begins_with("172."):
-				ip_text = addr
-				break
-		var upnp_status = "\nUPnP: Port forwarded" if NetworkManager.upnp else "\nUPnP: Not available (manual forwarding may be needed)"
-		status_label.text = "Hosting on port " + str(port) + "\nYour IP: " + ip_text + upnp_status + "\nWaiting for opponent..."
-		host_button.disabled = true
-		join_button.disabled = true
-		find_match_button.disabled = true
-	else:
-		status_label.text = "Failed to host: " + str(err)
+	status_label.text = "Direct hosting isn't available in relay mode.\nUse Find Match instead."
 
 func _on_join_pressed():
-	var ip = join_ip.text if join_ip.text != "" else "127.0.0.1"
-	var port = int(join_port.text) if join_port.text != "" else 7777
-	var err = NetworkManager.join_game(ip, port)
-	if err == OK:
-		status_label.text = "Connecting to " + ip + ":" + str(port) + "..."
-		host_button.disabled = true
-		join_button.disabled = true
-		find_match_button.disabled = true
-	else:
-		status_label.text = "Failed to connect: " + str(err)
+	status_label.text = "Direct join isn't available in relay mode.\nUse Find Match instead."
 
 func _on_find_match_pressed():
 	var room_name = room_input.text.strip_edges()
@@ -62,30 +56,14 @@ func _on_find_match_pressed():
 
 	status_label.text = "Searching for match...\nRoom: " + room_name
 	find_match_button.disabled = true
-	host_button.disabled = true
-	join_button.disabled = true
 	current_room = room_name
-
-	matchmaking = load("res://scripts/matchmaking_client.gd").new()
-	add_child(matchmaking)
-	matchmaking.connect_to_server("31.70.109.158", 5000)
-	matchmaking.mm_match_found.connect(_on_match_found)
-	matchmaking.mm_match_cancelled.connect(_on_match_cancelled)
-	matchmaking.mm_match_timeout.connect(_on_match_timeout)
-	matchmaking.mm_match_waiting.connect(_on_match_waiting)
-	matchmaking.mm_match_full.connect(_on_match_full)
-	matchmaking.join_room(room_name)
+	NetworkManager.join_room(room_name)
 
 func _on_match_waiting():
 	status_label.text = "Waiting for opponent...\nRoom: " + current_room
 
-func _on_match_found(peer_ip: String, peer_port: int):
-	status_label.text = "Match found!\nConnecting to " + peer_ip + ":" + str(peer_port) + "..."
-	NetworkManager.set_my_positions(PozycjaOsobista.ustawienia_bialych, PozycjaOsobista.ustawienia_czarnych)
-	var err = NetworkManager.join_game(peer_ip, peer_port)
-	if err != OK:
-		status_label.text = "Failed to connect to peer: " + str(err)
-		_reset_buttons()
+func _on_match_found():
+	status_label.text = "Match found! Connecting..."
 
 func _on_match_cancelled():
 	status_label.text = "Match cancelled.\nOpponent left the room."
@@ -101,11 +79,6 @@ func _on_match_full():
 
 func _reset_buttons():
 	find_match_button.disabled = false
-	host_button.disabled = false
-	join_button.disabled = false
-	if matchmaking:
-		matchmaking.queue_free()
-		matchmaking = null
 
 func _on_player_connected():
 	NetworkManager.set_my_positions(PozycjaOsobista.ustawienia_bialych, PozycjaOsobista.ustawienia_czarnych)
@@ -114,6 +87,10 @@ func _on_player_connected():
 		start_coinflip()
 	else:
 		status_label.text = "Connected! Waiting for coin flip..."
+
+func _on_player_disconnected():
+	status_label.text = "Connection lost."
+	_reset_buttons()
 
 func start_coinflip():
 	var okno = OKNO.instantiate()
@@ -134,9 +111,8 @@ func _on_game_started(white_pieces: Array, black_pieces: Array, host_is_white: b
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
 func _on_back_pressed():
-	if matchmaking:
-		matchmaking.leave_room(current_room)
-		matchmaking.queue_free()
-		matchmaking = null
+	if current_room != "":
+		NetworkManager.leave_room(current_room)
+		current_room = ""
 	NetworkManager.close_connection()
 	get_tree().change_scene_to_file("res://scenes/menu glowne.tscn")
