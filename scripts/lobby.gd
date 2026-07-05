@@ -106,7 +106,7 @@ func start_coinflip():
 	NetworkManager.start_game()
 	_on_game_started(
 		PozycjaOsobista.ustawienia_bialych,
-		[],
+		NetworkManager.opponent_pieces,
 		NetworkManager.host_is_white
 	)
 
