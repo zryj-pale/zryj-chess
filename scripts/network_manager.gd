@@ -120,6 +120,27 @@ func set_my_positions(white_pieces: Array, black_pieces: Array) -> void:
 	my_black_pieces = black_pieces
 
 
+func _serialize_pieces(pieces: Array) -> Array:
+	# Converts [[type, Vector2i], ...] -> [[type, [x, y]], ...] for JSON.
+	var out: Array = []
+	for entry in pieces:
+		var pos = entry[1]
+		if pos is Vector2i:
+			out.append([entry[0], [pos.x, pos.y]])
+		else:
+			out.append([entry[0], [int(pos[0]), int(pos[1])]])
+	return out
+
+
+func _deserialize_pieces(pieces: Array) -> Array:
+	# Converts [[type, [x, y]], ...] (JSON gives floats) -> [[type, Vector2i], ...]
+	var out: Array = []
+	for entry in pieces:
+		var pos = entry[1]
+		out.append([entry[0], Vector2i(int(pos[0]), int(pos[1]))])
+	return out
+
+
 func broadcast_coinflip(result: String) -> void:
 	host_is_white = (result == "orzel")
 	_send_reliable("coinflip", {"result": result})
@@ -129,8 +150,8 @@ func start_game() -> void:
 	var final_white = my_white_pieces if host_is_white else my_black_pieces
 	var final_black = my_black_pieces if host_is_white else my_white_pieces
 	_send_reliable("game_start", {
-		"white": final_white,
-		"black": final_black,
+		"white": _serialize_pieces(final_white),
+		"black": _serialize_pieces(final_black),
 		"host_is_white": host_is_white,
 	})
 
@@ -262,11 +283,13 @@ func _handle_data(payload_str: String) -> void:
 			host_is_white = (data.get("result") == "orzel")
 			coinflip_received.emit(data.get("result"))
 		"game_start":
-			game_started.emit(data.get("white", []), data.get("black", []), data.get("host_is_white", true))
+			var white = _deserialize_pieces(data.get("white", []))
+			var black = _deserialize_pieces(data.get("black", []))
+			game_started.emit(white, black, data.get("host_is_white", true))
 		"move":
 			var f = data.get("from", [0, 0])
 			var t = data.get("to", [0, 0])
-			move_received.emit(Vector2i(f[0], f[1]), Vector2i(t[0], t[1]))
+			move_received.emit(Vector2i(int(f[0]), int(f[1])), Vector2i(int(t[0]), int(t[1])))
 
 
 # ---------------------------------------------------------------------
