@@ -44,7 +44,6 @@ func _ready() -> void:
 		NetworkManager.player_disconnected.connect(_on_player_disconnected)
 		ustawienie_z_pozycji()
 		kolor_posuniecia = "b"
-		$HUD/ZmianaButton.visible = false
 	else:
 		losowanie()
 		ustawienie_z_pozycji()
