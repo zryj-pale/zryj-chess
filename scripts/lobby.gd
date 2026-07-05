@@ -104,7 +104,6 @@ func start_coinflip():
 func _on_coinflip_received(result: String):
 	if not NetworkManager.is_host:
 		status_label.text = "Coin flip: " + result + "\nStarting game..."
-	NetworkManager.start_game()
 
 func _on_game_started(white_pieces: Array, black_pieces: Array, host_is_white: bool):
 	PozycjaOsobista.ustawienia_bialych = white_pieces
