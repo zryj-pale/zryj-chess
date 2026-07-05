@@ -40,6 +40,7 @@ var player_id := 0  # 1 = host/authority, 2 = joining player, matches old semant
 var my_white_pieces: Array = []
 var my_black_pieces: Array = []
 var host_is_white := true
+var white_moves_first := true
 
 # --- Reliability layer (ack + retry over the unreliable relay) ---
 const RESEND_INTERVAL := 0.3
@@ -106,6 +107,7 @@ func _reset_room_state() -> void:
 	player_id = 0
 	my_white_pieces = []
 	my_black_pieces = []
+	white_moves_first = true
 	_pending.clear()
 	_seen_in_seqs.clear()
 	_out_seq = 0
@@ -142,17 +144,16 @@ func _deserialize_pieces(pieces: Array) -> Array:
 
 
 func broadcast_coinflip(result: String) -> void:
-	host_is_white = (result == "orzel")
+	white_moves_first = (result == "orzel")
 	_send_reliable("coinflip", {"result": result})
 
 
 func start_game() -> void:
-	var final_white = my_white_pieces if host_is_white else my_black_pieces
-	var final_black = my_black_pieces if host_is_white else my_white_pieces
 	_send_reliable("game_start", {
-		"white": _serialize_pieces(final_white),
-		"black": _serialize_pieces(final_black),
+		"white": _serialize_pieces(my_white_pieces),
+		"black": _serialize_pieces(my_black_pieces),
 		"host_is_white": host_is_white,
+		"white_moves_first": white_moves_first,
 	})
 
 
@@ -280,11 +281,12 @@ func _handle_data(payload_str: String) -> void:
 
 	match type:
 		"coinflip":
-			host_is_white = (data.get("result") == "orzel")
+			white_moves_first = (data.get("result") == "orzel")
 			coinflip_received.emit(data.get("result"))
 		"game_start":
 			var white = _deserialize_pieces(data.get("white", []))
 			var black = _deserialize_pieces(data.get("black", []))
+			white_moves_first = data.get("white_moves_first", true)
 			game_started.emit(white, black, data.get("host_is_white", true))
 		"move":
 			var f = data.get("from", [0, 0])

@@ -100,10 +100,9 @@ func start_coinflip():
 	await okno.koniec_rzutu
 	NetworkManager.broadcast_coinflip(okno.wyrzucona)
 	NetworkManager.start_game()
-	# Host transitions directly — it won't receive its own game_start message
 	_on_game_started(
-		PozycjaOsobista.ustawienia_bialych if NetworkManager.host_is_white else PozycjaOsobista.ustawienia_czarnych,
-		PozycjaOsobista.ustawienia_czarnych if NetworkManager.host_is_white else PozycjaOsobista.ustawienia_bialych,
+		PozycjaOsobista.ustawienia_bialych,
+		PozycjaOsobista.ustawienia_czarnych,
 		NetworkManager.host_is_white
 	)
 

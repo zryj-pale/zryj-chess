@@ -36,14 +36,11 @@ func _ready() -> void:
 	add_to_group("game_main")
 	generacja_pol(6)
 	if NetworkManager.player_id > 0:
-		if NetworkManager.host_is_white:
-			my_color = "b" if NetworkManager.is_host else "c"
-		else:
-			my_color = "c" if NetworkManager.is_host else "b"
+		my_color = "b" if NetworkManager.is_host else "c"
 		NetworkManager.move_received.connect(_on_network_move)
 		NetworkManager.player_disconnected.connect(_on_player_disconnected)
 		ustawienie_z_pozycji()
-		kolor_posuniecia = "b"
+		kolor_posuniecia = "b" if NetworkManager.white_moves_first else "c"
 	else:
 		losowanie()
 		ustawienie_z_pozycji()
