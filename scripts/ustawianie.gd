@@ -233,10 +233,12 @@ func synchronizacja():
 	reset()
 	if kolor_posuniecia == "b":
 		for figura in PozycjaOsobista.ustawienia_bialych:
-			var pole = Vector2i(figura[1]) if figura[1] is not Vector2i else figura[1]
+			var pos = figura[1]
+			var pole = pos if pos is Vector2i else Vector2i(pos[0], pos[1])
 			dodaj(figura[0], "b", pole)
 	else:
 		for figura in PozycjaOsobista.ustawienia_czarnych:
-			var pole = Vector2i(figura[1]) if figura[1] is not Vector2i else figura[1]
+			var pos = figura[1]
+			var pole = pos if pos is Vector2i else Vector2i(pos[0], pos[1])
 			dodaj(figura[0], "c", pole)
 	$PieceMenu.create_menu()

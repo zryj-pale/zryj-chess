@@ -63,10 +63,12 @@ func _on_player_disconnected():
 
 func ustawienie_z_pozycji():
 	for figura in PozycjaOsobista.ustawienia_bialych:
-		var pole = Vector2i(figura[1]) if figura[1] is not Vector2i else figura[1]
+		var pos = figura[1]
+		var pole = pos if pos is Vector2i else Vector2i(pos[0], pos[1])
 		dodaj(figura[0], "b", pole)
 	for figura in PozycjaOsobista.ustawienia_czarnych:
-		var raw = Vector2i(figura[1]) if figura[1] is not Vector2i else figura[1]
+		var pos = figura[1]
+		var raw = pos if pos is Vector2i else Vector2i(pos[0], pos[1])
 		var pole = Vector2i(raw.x, 7 - raw.y)
 		dodaj(figura[0], "c", pole)
 	
