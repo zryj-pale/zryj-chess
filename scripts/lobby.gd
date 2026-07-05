@@ -99,6 +99,7 @@ func start_coinflip():
 	add_child(okno)
 	await okno.koniec_rzutu
 	NetworkManager.broadcast_coinflip(okno.wyrzucona)
+	NetworkManager.start_game()
 
 func _on_coinflip_received(result: String):
 	if not NetworkManager.is_host:
