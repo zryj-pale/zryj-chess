@@ -26,7 +26,6 @@ var figury = []
 var chwycona = null
 var poczatkowe_pole = null
 var dostepne_pola = []
-var kolor_posuniecia = "b"
 
 var wybrana = null
 var dragging = false
@@ -46,7 +45,7 @@ func create_drag_preview(typ: String):
 		drag_preview.queue_free()
 	drag_preview = preload("res://scenes/figura.tscn").instantiate()
 	drag_preview.typ = typ
-	drag_preview.kolor = kolor_posuniecia
+	drag_preview.kolor = "b"
 	drag_preview.top_level = true
 	drag_preview.modulate = Color(1, 1, 1, 0.7)
 	drag_preview.get_node("tekstura/Area2D").monitoring = false
@@ -59,22 +58,16 @@ func create_drag_preview(typ: String):
 func _process(_delta: float) -> void:
 	if dragging and drag_preview:
 		drag_preview.global_position = get_global_mouse_position()
-	var punkty = oblicz_punkty(kolor_posuniecia)
+	var punkty = oblicz_punkty()
 	progress_bar.value = punkty
 	punkty_label.text = str(punkty) + "/" + str(MAX_PUNKTY)
-	if kolor_posuniecia == "b":
-		progress_bar.modulate = Color(1, 1, 1)
-		punkty_label.modulate = Color(1, 1, 1)
-	else:
-		progress_bar.modulate = Color(0.4, 0.4, 0.4)
-		punkty_label.modulate = Color(0.4, 0.4, 0.4)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if dragging:
 			var wskazane_pole = plansza.local_to_map(get_global_mouse_position())
 			if wskazane_pole.x >= 0 and wskazane_pole.x <= 7 and wskazane_pole.y >= 0 and wskazane_pole.y <= 7 and stoi_figura(wskazane_pole) == null and can_place(drag_piece_type):
-				dodaj(drag_piece_type, kolor_posuniecia, wskazane_pole)
+				dodaj(drag_piece_type, "b", wskazane_pole)
 				zapisz_figure(drag_piece_type, wskazane_pole)
 			dragging = false
 			drag_piece_type = null
@@ -83,7 +76,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				drag_preview = null
 		else:
 			var figura = najechana_figura()
-			if figura and figura.kolor == kolor_posuniecia:
+			if figura and figura.kolor == "b":
 				usun_figure(figura)
 
 func usun_figure(figura):
@@ -94,41 +87,29 @@ func usun_figure(figura):
 	$dzwiek/zakaz.play()
 
 func usun_z_pamieci(typ: String, pole: Vector2i):
-	if kolor_posuniecia == "b":
-		for i in range(PozycjaOsobista.ustawienia_bialych.size() - 1, -1, -1):
-			var ustawienie = PozycjaOsobista.ustawienia_bialych[i]
-			if ustawienie[0] == typ and ustawienie[1] == pole:
-				PozycjaOsobista.ustawienia_bialych.remove_at(i)
-				break
-	else:
-		for i in range(PozycjaOsobista.ustawienia_czarnych.size() - 1, -1, -1):
-			var ustawienie = PozycjaOsobista.ustawienia_czarnych[i]
-			if ustawienie[0] == typ and ustawienie[1] == pole:
-				PozycjaOsobista.ustawienia_czarnych.remove_at(i)
-				break
+	for i in range(PozycjaOsobista.ustawienia_bialych.size() - 1, -1, -1):
+		var ustawienie = PozycjaOsobista.ustawienia_bialych[i]
+		if ustawienie[0] == typ and ustawienie[1] == pole:
+			PozycjaOsobista.ustawienia_bialych.remove_at(i)
+			break
 
 func zapisz_figure(typ: String, pole: Vector2i):
-	if kolor_posuniecia == "b":
-		PozycjaOsobista.ustawienia_bialych.append([typ, pole])
-	else:
-		PozycjaOsobista.ustawienia_czarnych.append([typ, pole])
+	PozycjaOsobista.ustawienia_bialych.append([typ, pole])
 
-func oblicz_punkty(kolor: String) -> int:
+func oblicz_punkty() -> int:
 	var punkty = 0
-	var ustawienia = PozycjaOsobista.ustawienia_bialych if kolor == "b" else PozycjaOsobista.ustawienia_czarnych
-	for ustawienie in ustawienia:
+	for ustawienie in PozycjaOsobista.ustawienia_bialych:
 		punkty += wartosci_figur.get(ustawienie[0], 0)
 	return punkty
 
-func ma_krola(kolor: String) -> bool:
-	var ustawienia = PozycjaOsobista.ustawienia_bialych if kolor == "b" else PozycjaOsobista.ustawienia_czarnych
-	for ustawienie in ustawienia:
+func ma_krola() -> bool:
+	for ustawienie in PozycjaOsobista.ustawienia_bialych:
 		if ustawienie[0] == "K":
 			return true
 	return false
 
 func can_place(typ: String) -> bool:
-	var current_points = oblicz_punkty(kolor_posuniecia)
+	var current_points = oblicz_punkty()
 	var piece_points = wartosci_figur.get(typ, 0)
 	if current_points + piece_points > MAX_PUNKTY:
 		$dzwiek/zakaz.play()
@@ -148,7 +129,7 @@ func chwyc(figura):
 
 func stan_idle(wskazane_pole):
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		if najechana_figura()and najechana_figura().kolor == kolor_posuniecia:
+		if najechana_figura()and najechana_figura().kolor == "b":
 			chwyc(najechana_figura())
 			stan = stany.GRAB
 
@@ -212,33 +193,15 @@ func reset():
 func _on_reset_pressed() -> void:
 	reset()
 	PozycjaOsobista.ustawienia_bialych.clear()
-	PozycjaOsobista.ustawienia_czarnych.clear()
 
 
 func _on_menu_pressed() -> void:
-	if not ma_krola("b") or not ma_krola("c"):
-		$dzwiek/zakaz.play()
-		return
 	get_tree().change_scene_to_file("res://scenes/menu glowne.tscn")
-
-
-func _on_zmiana_kolorow_pressed() -> void:
-	if kolor_posuniecia == "b":
-		kolor_posuniecia = "c"
-	else:
-		kolor_posuniecia = "b"
-	synchronizacja()
 
 func synchronizacja():
 	reset()
-	if kolor_posuniecia == "b":
-		for figura in PozycjaOsobista.ustawienia_bialych:
-			var pos = figura[1]
-			var pole = pos if pos is Vector2i else Vector2i(pos[0], pos[1])
-			dodaj(figura[0], "b", pole)
-	else:
-		for figura in PozycjaOsobista.ustawienia_czarnych:
-			var pos = figura[1]
-			var pole = pos if pos is Vector2i else Vector2i(pos[0], pos[1])
-			dodaj(figura[0], "c", pole)
+	for figura in PozycjaOsobista.ustawienia_bialych:
+		var pos = figura[1]
+		var pole = pos if pos is Vector2i else Vector2i(pos[0], pos[1])
+		dodaj(figura[0], "b", pole)
 	$PieceMenu.create_menu()

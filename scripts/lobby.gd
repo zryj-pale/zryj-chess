@@ -81,18 +81,22 @@ func _reset_buttons():
 	find_match_button.disabled = false
 
 func _on_player_connected():
-	NetworkManager.set_my_positions(PozycjaOsobista.ustawienia_bialych, PozycjaOsobista.ustawienia_czarnych)
+	NetworkManager.set_my_positions(PozycjaOsobista.ustawienia_bialych, [])
 	if NetworkManager.is_host:
-		status_label.text = "Opponent connected!\nFlipping coin..."
+		status_label.text = "Opponent connected!\nWaiting for pieces..."
 		start_coinflip()
 	else:
-		status_label.text = "Connected! Waiting for coin flip..."
+		NetworkManager.send_my_pieces()
+		status_label.text = "Connected! Waiting for game to start..."
 
 func _on_player_disconnected():
 	status_label.text = "Connection lost."
 	_reset_buttons()
 
 func start_coinflip():
+	# Wait for opponent's pieces to arrive via network
+	await get_tree().create_timer(0.5).timeout
+	status_label.text = "Flipping coin..."
 	var okno = OKNO.instantiate()
 	okno.global_position = Vector2.ZERO
 	okno.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -102,7 +106,7 @@ func start_coinflip():
 	NetworkManager.start_game()
 	_on_game_started(
 		PozycjaOsobista.ustawienia_bialych,
-		PozycjaOsobista.ustawienia_czarnych,
+		[],
 		NetworkManager.host_is_white
 	)
 

@@ -37,8 +37,8 @@ var is_searching := false
 var is_host := false
 var player_id := 0  # 1 = host/authority, 2 = joining player, matches old semantics
 
-var my_white_pieces: Array = []
-var my_black_pieces: Array = []
+var my_pieces: Array = []
+var opponent_pieces: Array = []
 var host_is_white := true
 var white_moves_first := true
 
@@ -105,8 +105,8 @@ func _reset_room_state() -> void:
 	room_name = ""
 	is_host = false
 	player_id = 0
-	my_white_pieces = []
-	my_black_pieces = []
+	my_pieces = []
+	opponent_pieces = []
 	white_moves_first = true
 	_pending.clear()
 	_seen_in_seqs.clear()
@@ -117,9 +117,14 @@ func _reset_room_state() -> void:
 # Game API -- same method names/signatures as the old NetworkManager
 # ---------------------------------------------------------------------
 
-func set_my_positions(white_pieces: Array, black_pieces: Array) -> void:
-	my_white_pieces = white_pieces
-	my_black_pieces = black_pieces
+func set_my_positions(white_pieces: Array, _black_pieces: Array) -> void:
+	my_pieces = white_pieces
+
+
+func send_my_pieces() -> void:
+	_send_reliable("set_pieces", {
+		"pieces": _serialize_pieces(my_pieces),
+	})
 
 
 func _serialize_pieces(pieces: Array) -> Array:
@@ -150,8 +155,8 @@ func broadcast_coinflip(result: String) -> void:
 
 func start_game() -> void:
 	_send_reliable("game_start", {
-		"white": _serialize_pieces(my_white_pieces),
-		"black": _serialize_pieces(my_black_pieces),
+		"white": _serialize_pieces(my_pieces),
+		"black": _serialize_pieces(opponent_pieces),
 		"host_is_white": host_is_white,
 		"white_moves_first": white_moves_first,
 	})
@@ -280,6 +285,8 @@ func _handle_data(payload_str: String) -> void:
 	var data = parsed.get("data", {})
 
 	match type:
+		"set_pieces":
+			opponent_pieces = _deserialize_pieces(data.get("pieces", []))
 		"coinflip":
 			white_moves_first = (data.get("result") == "orzel")
 			coinflip_received.emit(data.get("result"))
