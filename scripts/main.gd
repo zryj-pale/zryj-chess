@@ -44,7 +44,7 @@ func _ready() -> void:
 			kolor_posuniecia = "b"
 		else:
 			kolor_posuniecia = "b"
-		$dzwiek/muzyka w tle".play()
+		$dzwiek/"muzyka w tle".play()
 	else:
 		losowanie()
 		ustawienie_z_pozycji()
