@@ -1,18 +1,18 @@
-[gd_scene load_steps=3 format=3 uid="uid://u77rgg16vs0n"]
+[gd_scene format=3 uid="uid://culur57lpecpt"]
 
-[ext_resource type="Script" uid="uid://cwa07jr5vh46r" path="res://menu_figur.gd" id="1_tacvp"]
+[ext_resource type="Script" path="res://menu_figur.gd" id="1_tacvp"]
 [ext_resource type="Texture2D" uid="uid://bbxbvjf1hidus" path="res://assets/charlie.jpg" id="2_1mv5g"]
 
-[node name="Node2D" type="Node2D"]
+[node name="Node2D" type="Node2D" unique_id=908800698]
 script = ExtResource("1_tacvp")
 
-[node name="Control" type="Control" parent="."]
+[node name="Control" type="Control" parent="." unique_id=11292074]
 layout_mode = 3
 anchors_preset = 0
 offset_right = 40.0
 offset_bottom = 40.0
 
-[node name="HBoxContainer" type="HBoxContainer" parent="Control"]
+[node name="HBoxContainer" type="HBoxContainer" parent="Control" unique_id=2072089708]
 layout_mode = 1
 anchors_preset = -1
 anchor_right = 1.0
@@ -21,9 +21,9 @@ grow_horizontal = 2
 grow_vertical = 2
 metadata/_edit_use_anchors_ = true
 
-[node name="Control" type="Control" parent="Control/HBoxContainer"]
+[node name="Control" type="Control" parent="Control/HBoxContainer" unique_id=1551689103]
 layout_mode = 2
 
-[node name="Sprite2D" type="Sprite2D" parent="Control/HBoxContainer/Control"]
+[node name="Sprite2D" type="Sprite2D" parent="Control/HBoxContainer/Control" unique_id=1040601639]
 scale = Vector2(0.01, 0.01)
 texture = ExtResource("2_1mv5g")

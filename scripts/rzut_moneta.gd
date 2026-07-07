@@ -21,8 +21,8 @@ func _process(_delta: float) -> void:
 				wyrzucona.emit("orzel")
 
 func _input(_event: InputEvent) -> void:
-	if Input.is_action_just_pressed("space") and moneta.rzucona == false:
-		rzut(moneta, 150, 12)
+	if Input.is_action_just_pressed("space"):
+		rzut(moneta, 100, 12)
 
 func nieruchomy(obiekt, tolerancja):
 	if abs(obiekt.linear_velocity[0]) < tolerancja and abs(obiekt.linear_velocity[1]) < tolerancja and abs(obiekt.linear_velocity[2]) < tolerancja:
