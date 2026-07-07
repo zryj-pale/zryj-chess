@@ -1,0 +1,36 @@
+[gd_scene format=3 uid="uid://3nfmwfydb1p1"]
+
+[ext_resource type="Script" uid="uid://dc30mfpoq1ao6" path="res://scenes/online.gd" id="1_31nut"]
+[ext_resource type="Script" uid="uid://pjpjh07ah4r1" path="res://scenes/check_button.gd" id="2_f76am"]
+[ext_resource type="Script" uid="uid://d4mgcryc7pb1i" path="res://scenes/relay.gd" id="3_a2vqi"]
+
+[node name="Control" type="Control" unique_id=1463567150]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_31nut")
+
+[node name="room name" type="LineEdit" parent="." unique_id=1708261030]
+layout_mode = 0
+offset_left = 141.0
+offset_top = 110.0
+offset_right = 390.0
+offset_bottom = 141.0
+
+[node name="CheckButton" type="CheckButton" parent="." unique_id=1996892314]
+layout_mode = 0
+offset_left = 190.0
+offset_top = 142.0
+offset_right = 346.0
+offset_bottom = 183.0
+text = "wyszukiwanie"
+script = ExtResource("2_f76am")
+
+[node name="relay" type="Node" parent="." unique_id=1850064948]
+script = ExtResource("3_a2vqi")
+
+[connection signal="button_down" from="CheckButton" to="." method="_on_check_button_button_down"]
+[connection signal="button_up" from="CheckButton" to="." method="_on_check_button_button_up"]
