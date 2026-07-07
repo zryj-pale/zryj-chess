@@ -35,6 +35,7 @@ const ZNACZNIK = preload("uid://bug72ag1gmt76")
 func _ready() -> void:
 	add_to_group("game_main")
 	generacja_pol(6)
+<<<<<<< HEAD
 	if NetworkManager.player_id > 0:
 		my_color = "b" if NetworkManager.is_host else "c"
 		NetworkManager.move_received.connect(_on_network_move)
@@ -68,6 +69,10 @@ func ustawienie_z_pozycji():
 		var pole = Vector2i(figura[1].x, 7 - figura[1].y)
 		dodaj(figura[0], "c", pole)
 	
+=======
+	domyslne_ustawienie()
+	losowanie()
+>>>>>>> parent of 01d08f7 (dodano różne rzeczy)
 
 func najechana_figura():
 	for figura in figury:
@@ -248,10 +253,10 @@ func get_king(kolor):
 			return figura
 
 func domyslne_ustawienie():
-	#dodaj("S", "b", Vector2i(2, 5))
-	#dodaj("S", "b", Vector2i(4, 5))
-	#dodaj("W", "b", Vector2i(3, 5))
-	#dodaj("K", "b", Vector2i(2, 6))
+	dodaj("S", "b", Vector2i(2, 5))
+	dodaj("S", "b", Vector2i(4, 5))
+	dodaj("W", "b", Vector2i(3, 5))
+	dodaj("K", "b", Vector2i(2, 6))
 	
 	dodaj("S", "c", Vector2i(2, 2))
 	dodaj("K", "c", Vector2i(2,1))
@@ -388,7 +393,7 @@ func koniec_gry(kolor_wygranej=null):
 			print("czarne wygrywaja!")
 		null:
 			print("pat!")
-	get_tree().change_scene_to_file("res://scenes/menu glowne.tscn")
+	queue_free()
 
 func moze_promowac(figura):
 	if figura.typ == "P":
@@ -403,7 +408,6 @@ func losowanie():
 	okno.global_position = get_viewport_rect().size/2
 	add_child(okno)
 	await okno.koniec_rzutu
-	Engine.time_scale = 1
 	if okno.wyrzucona == "reszka":
 		kolor_posuniecia = "c"
 	else:

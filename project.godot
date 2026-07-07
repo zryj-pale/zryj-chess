@@ -16,18 +16,26 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 config/name="zryj chess"
 run/main_scene="uid://b1d864e021a2s"
+<<<<<<< HEAD
 config/features=PackedStringArray("4.7", "Mobile")
 boot_splash/image="uid://cmbtixykhyb0q"
+=======
+config/features=PackedStringArray("4.5", "Mobile")
+boot_splash/image="res://assets/bruno blunt Medium.png"
+>>>>>>> parent of 01d08f7 (dodano różne rzeczy)
 
 [audio]
 
 buses/default_bus_layout=""
 
+<<<<<<< HEAD
 [autoload]
 
 PozycjaOsobista="*res://scripts/pozycja_osobista.gd"
 NetworkManager="*res://scripts/network_manager.gd"
 
+=======
+>>>>>>> parent of 01d08f7 (dodano różne rzeczy)
 [display]
 
 window/size/viewport_width=512
