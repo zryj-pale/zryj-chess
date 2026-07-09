@@ -32,5 +32,12 @@ script = ExtResource("2_f76am")
 [node name="relay" type="Node" parent="." unique_id=1850064948]
 script = ExtResource("3_a2vqi")
 
-[connection signal="button_down" from="CheckButton" to="." method="_on_check_button_button_down"]
-[connection signal="button_up" from="CheckButton" to="." method="_on_check_button_button_up"]
+[node name="Label" type="Label" parent="." unique_id=373019674]
+layout_mode = 0
+offset_left = 196.0
+offset_top = 224.0
+offset_right = 297.0
+offset_bottom = 247.0
+
+[connection signal="toggled" from="CheckButton" to="." method="przycisk_wlaczon"]
+[connection signal="message_received" from="relay" to="." method="_on_relay_message_received"]
