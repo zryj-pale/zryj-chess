@@ -122,7 +122,10 @@ To są zasady zaimplementowane obecnie; nie są jeszcze pełną, ostateczną spe
 - Każdy kolor ma 2 dodatkowe pola do dołożenia. Wejście w tryb dokładania pola: `Spacja`.
 - Dołożenie pola nie kończy tury; ruch figury kończy turę.
 - Zaimplementowano ruchy: pion, skoczek, goniec, wieża, hetman, król.
-- Jest bicie, wykrywanie szacha, mata i pata.
+- Figury można przesuwać zarówno kliknięciem, jak i przeciąganiem; w kreatorze można też przeciągać już ustawione figury.
+- Jest bicie, wykrywanie szacha, mata i pata. Walidacja ruchu odbywa się na kopii stanu planszy, bez chwilowego przesuwania widoku figury.
+- Kolor z więcej niż jednym królem może tracić króle jak zwykłe figury; standardowa ochrona szachem zaczyna działać natychmiast po pozostawieniu mu jednego króla.
+- Przy pojedynczym szachu w pozycji startowej ruch dostaje szachowany kolor. Jeżeli oba pojedyncze króle są szachowane, host losuje pozycje wszystkich figur na planszy 6×6 do czasu uzyskania pozycji bez szacha.
 - Pion promuje się automatycznie do hetmana.
 - Nie ma jeszcze roszady, bicia w przelocie, ruchu pionem o dwa pola ani mechaniki pasowania.
 
@@ -175,7 +178,7 @@ Gra na jednym komputerze. Działa jako główne środowisko testowania zasad.
 
 ### Online
 
-Pokój dla 2 osób. Host gra białymi, dołączający czarnymi. Obecna implementacja używa UDP, próbuje P2P i ma awaryjny relay przez VPS.
+Pokój dla 2 osób. Host gra białymi, dołączający czarnymi. Po zsynchronizowaniu ustawień host losuje wynik, a obie strony oglądają pełnoekranową animację rzutu monetą 3D; orzeł daje pierwszy ruch białym, reszka czarnym, z wyjątkiem startowego szacha. Implementacja używa UDP, próbuje P2P i ma awaryjny relay przez VPS.
 
 ### Kampania / tryb fabularny
 
@@ -191,10 +194,11 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 - Menu, intro wideo i audio.
 - Kreator neutralnego ustawienia figur z budżetem punktowym.
 - Lokalna rozgrywka na 6×6 z możliwością poszerzania do 8×8.
-- Podstawowa walidacja ruchów, szach/mat/pat i promocja.
+- Walidacja ruchów, szach/mat/pat, promocja oraz obsługa wielu króli.
 - HUD liczby pozostałych pól.
-- Lobby online i synchronizacja ruchów/dodawanych pól.
+- Lobby online, synchronizacja ruchów/dodawanych pól, początkowego układu i rzutu monety.
 - Własny protokół UDP z potwierdzeniami i retransmisją.
+- Zamykanie pokoju po meczu: klient hosta wysyła `GAME_CLOSE`, a serwer usuwa pokój i powiadamia gościa.
 
 ### Niezaimplementowane
 
@@ -226,12 +230,14 @@ Repozytorium zawiera znaczące lokalne, niezatwierdzone zmiany w aktualnej wersj
 | Komponent | Odpowiedzialność |
 | --- | --- |
 | `main.gd` | Stan meczu, ruchy, walidacja, tury, szach/mat/pat, rozszerzanie planszy, akcje sieciowe. |
+| `game_rules.gd` | Czysty silnik zasad: generowanie ruchów, ataki, szach, wielokrólewskość, mata/pat i losowanie bezpiecznej pozycji startowej. |
 | `ustawianie.gd` | Kreator armii, budżet punktów, drag-and-drop, zapis neutralnego układu. |
 | `network_manager.gd` | Pokoje online, P2P hole punching, relay, niezawodne przesyłanie akcji. |
 | `lobby.gd` | Interfejs tworzenia i dołączania do pokoju. |
 | `pozycja_osobista.gd` | Autoload przechowujący układ przygotowany przez gracza. |
 | `figura.gd` | Prezentacja figury, hitbox, typ, kolor i promocja. |
 | `hud.gd` | Liczniki dodatkowych pól i wizualizacja aktualnej tury. |
+| `rzut_moneta.gd`, `control.gd` | Zsynchronizowana, pełnoekranowa prezentacja rzutu monety 3D oraz przywracanie globalnych ustawień czasu/fizyki. |
 
 Autoloady zdefiniowane w `project.godot`:
 
@@ -333,4 +339,3 @@ Poniższe pytania wymagają decyzji zespołu przed większą implementacją:
 - Jak daleko wolno odejść od klasycznych szachów, aby gra nadal była intuicyjna?
 - Czy kampania ma być całkowicie ukryta, czy odkrywana przez sekretne warunki w menu/meczach?
 - Jaki jest docelowy tytuł: „Mini Chess”, „Zryj Chess”, czy nazwa związana z infekcją/systemem?
-
