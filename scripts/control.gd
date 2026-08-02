@@ -8,9 +8,13 @@ var can_launch := true
 
 func _ready() -> void:
 	z_index = 4
-	$SubViewportContainer/SubViewport.size = get_viewport_rect().size*5/6
+	_set_viewport_size()
+	get_viewport().size_changed.connect(_set_viewport_size)
 	$SubViewportContainer/SubViewport/Node3D.configure(forced_result, can_launch)
 	$SubViewportContainer/SubViewport/Node3D.throw_started.connect(func(): throw_started.emit())
+
+func _set_viewport_size() -> void:
+	$SubViewportContainer/SubViewport.size = Vector2i(get_viewport_rect().size)
 
 func configure(result: String, allow_launch: bool) -> void:
 	forced_result = result

@@ -129,10 +129,7 @@ func stan_select(pole: Vector2i, pressed: bool) -> void:
 		return
 	var figura = najechana_figura()
 	if figura and figura.kolor == kolor_posuniecia:
-		if figura == wybrana:
-			_begin_grab(figura)
-		else:
-			wybrana = figura
+		_begin_grab(figura)
 		return
 	if not ruch(wybrana, pole):
 		wybrana = null
