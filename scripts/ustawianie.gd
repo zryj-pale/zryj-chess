@@ -1,139 +1,104 @@
 extends Node2D
 
-@onready var plansza = $TileMapLayer
-@export var dodawanie_pol = false
+@onready var plansza: TileMapLayer = $TileMapLayer
+@onready var progress_bar: ProgressBar = $ProgressBar
+@onready var punkty_label: Label = $PunktyLabel
 
-var wartosci_figur = {
-	"P":1,
-	"S":2,
-	"G":2,
-	"W":4,
-	"H":6,
-	"K":6
-}
-const MAX_PUNKTY = 16
+const MAX_PUNKTY := 16
+const SZARY_KOLOR := Color(0.55, 0.55, 0.55, 1.0)
+const WARTOSCI_FIGUR := {"P": 1, "S": 2, "G": 2, "W": 4, "H": 6, "K": 6}
 
-
-
-enum stany{
-	IDLE,
-	GRAB,
-	SELECT
-}
-var stan := stany.IDLE
-
-var figury = []
-var chwycona = null
-var poczatkowe_pole = null
-var dostepne_pola = []
-var kolor_posuniecia = "b"
-
-var wybrana = null
-var dragging = false
-var drag_piece_type = null
+var figury: Array = []
+var dostepne_pola: Array[Vector2i] = []
+var dragging := false
+var drag_piece_type := ""
 var drag_preview = null
 
 func _ready() -> void:
-	generacja_pol(1,4,6,6)
-
-func _on_piece_selected(typ: String):
-	drag_piece_type = typ
-	dragging = true
-	create_drag_preview(typ)
-
-func create_drag_preview(typ: String):
-	if drag_preview:
-		drag_preview.queue_free()
-	drag_preview = preload("res://scenes/figura.tscn").instantiate()
-	drag_preview.typ = typ
-	drag_preview.kolor = kolor_posuniecia
-	drag_preview.top_level = true
-	drag_preview.modulate = Color(1, 1, 1, 0.7)
-	drag_preview.get_node("tekstura/Area2D").monitoring = false
-	drag_preview.get_node("tekstura/Area2D").monitorable = false
-	add_child(drag_preview)
-
-@onready var progress_bar = $ProgressBar
-@onready var punkty_label = $PunktyLabel
+	generacja_pol(1, 4, 6, 6)
+	synchronizacja()
 
 func _process(_delta: float) -> void:
 	if dragging and drag_preview:
 		drag_preview.global_position = get_global_mouse_position()
-	var punkty = oblicz_punkty(kolor_posuniecia)
+	var punkty := oblicz_punkty()
 	progress_bar.value = punkty
 	punkty_label.text = str(punkty) + "/" + str(MAX_PUNKTY)
-	if kolor_posuniecia == "b":
-		progress_bar.modulate = Color(1, 1, 1)
-		punkty_label.modulate = Color(1, 1, 1)
-	else:
-		progress_bar.modulate = Color(0.4, 0.4, 0.4)
-		punkty_label.modulate = Color(0.4, 0.4, 0.4)
+	progress_bar.modulate = SZARY_KOLOR
+	punkty_label.modulate = SZARY_KOLOR
+
+func _on_piece_selected(typ: String) -> void:
+	drag_piece_type = typ
+	dragging = true
+	if drag_preview:
+		drag_preview.queue_free()
+	drag_preview = preload("res://scenes/figura.tscn").instantiate()
+	drag_preview.typ = typ
+	drag_preview.kolor = "b"
+	drag_preview.top_level = true
+	drag_preview.modulate = Color(0.55, 0.55, 0.55, 0.7)
+	drag_preview.get_node("tekstura/Area2D").monitoring = false
+	drag_preview.get_node("tekstura/Area2D").monitorable = false
+	add_child(drag_preview)
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if dragging:
-			var wskazane_pole = plansza.local_to_map(get_global_mouse_position())
-			if wskazane_pole.x >= 0 and wskazane_pole.x <= 7 and wskazane_pole.y >= 0 and wskazane_pole.y <= 7 and stoi_figura(wskazane_pole) == null and can_place(drag_piece_type):
-				dodaj(drag_piece_type, kolor_posuniecia, wskazane_pole)
-				zapisz_figure(drag_piece_type, wskazane_pole)
-			dragging = false
-			drag_piece_type = null
-			if drag_preview:
-				drag_preview.queue_free()
-				drag_preview = null
-		else:
-			var figura = najechana_figura()
-			if figura and figura.kolor == kolor_posuniecia:
-				usun_figure(figura)
+	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
+		return
+	if dragging:
+		var pole: Vector2i = plansza.local_to_map(get_global_mouse_position())
+		if pole_na_planszy(pole) and not stoi_figura(pole) and can_place(drag_piece_type):
+			dodaj(drag_piece_type, pole)
+			PozycjaOsobista.ustawienie.append([drag_piece_type, pole])
+		_cancel_drag()
+		return
+	var figura = najechana_figura()
+	if figura:
+		usun_figure(figura)
 
-func usun_figure(figura):
-	var pole = pozycja(figura)
-	usun_z_pamieci(figura.typ, pole)
+func _cancel_drag() -> void:
+	dragging = false
+	drag_piece_type = ""
+	if drag_preview:
+		drag_preview.queue_free()
+		drag_preview = null
+
+func dodaj(typ: String, pole: Vector2i) -> void:
+	var figura = preload("res://scenes/figura.tscn").instantiate()
+	figura.typ = typ
+	figura.kolor = "b"
+	figura.modulate = SZARY_KOLOR
+	add_child(figura)
+	figury.append(figura)
+	figura.global_position = plansza.map_to_local(pole)
+
+func usun_figure(figura) -> void:
+	var pole: Vector2i = pozycja(figura)
+	for i in range(PozycjaOsobista.ustawienie.size() - 1, -1, -1):
+		var ustawienie = PozycjaOsobista.ustawienie[i]
+		if ustawienie[0] == figura.typ and ustawienie[1] == pole:
+			PozycjaOsobista.ustawienie.remove_at(i)
+			break
 	figury.erase(figura)
 	figura.queue_free()
 	$dzwiek/zakaz.play()
 
-func usun_z_pamieci(typ: String, pole: Vector2i):
-	if kolor_posuniecia == "b":
-		for i in range(PozycjaOsobista.ustawienia_bialych.size() - 1, -1, -1):
-			var ustawienie = PozycjaOsobista.ustawienia_bialych[i]
-			if ustawienie[0] == typ and ustawienie[1] == pole:
-				PozycjaOsobista.ustawienia_bialych.remove_at(i)
-				break
-	else:
-		for i in range(PozycjaOsobista.ustawienia_czarnych.size() - 1, -1, -1):
-			var ustawienie = PozycjaOsobista.ustawienia_czarnych[i]
-			if ustawienie[0] == typ and ustawienie[1] == pole:
-				PozycjaOsobista.ustawienia_czarnych.remove_at(i)
-				break
+func oblicz_punkty() -> int:
+	var wynik := 0
+	for ustawienie in PozycjaOsobista.ustawienie:
+		wynik += WARTOSCI_FIGUR.get(ustawienie[0], 0)
+	return wynik
 
-func zapisz_figure(typ: String, pole: Vector2i):
-	if kolor_posuniecia == "b":
-		PozycjaOsobista.ustawienia_bialych.append([typ, pole])
-	else:
-		PozycjaOsobista.ustawienia_czarnych.append([typ, pole])
+func can_place(typ: String) -> bool:
+	if oblicz_punkty() + WARTOSCI_FIGUR.get(typ, 0) <= MAX_PUNKTY:
+		return true
+	$dzwiek/zakaz.play()
+	return false
 
-func oblicz_punkty(kolor: String) -> int:
-	var punkty = 0
-	var ustawienia = PozycjaOsobista.ustawienia_bialych if kolor == "b" else PozycjaOsobista.ustawienia_czarnych
-	for ustawienie in ustawienia:
-		punkty += wartosci_figur.get(ustawienie[0], 0)
-	return punkty
-
-func ma_krola(kolor: String) -> bool:
-	var ustawienia = PozycjaOsobista.ustawienia_bialych if kolor == "b" else PozycjaOsobista.ustawienia_czarnych
-	for ustawienie in ustawienia:
+func ma_krola() -> bool:
+	for ustawienie in PozycjaOsobista.ustawienie:
 		if ustawienie[0] == "K":
 			return true
 	return false
-
-func can_place(typ: String) -> bool:
-	var current_points = oblicz_punkty(kolor_posuniecia)
-	var piece_points = wartosci_figur.get(typ, 0)
-	if current_points + piece_points > MAX_PUNKTY:
-		$dzwiek/zakaz.play()
-		return false
-	return true
 
 func najechana_figura():
 	for figura in figury:
@@ -141,100 +106,40 @@ func najechana_figura():
 			return figura
 	return null
 
-func chwyc(figura):
-	chwycona = figura
-	poczatkowe_pole = plansza.local_to_map(chwycona.global_position)
-	chwycona.top_level = true
-
-func stan_idle(wskazane_pole):
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		if najechana_figura()and najechana_figura().kolor == kolor_posuniecia:
-			chwyc(najechana_figura())
-			stan = stany.GRAB
-
-func stan_grab(wskazane_pole):
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		chwycona.global_position = get_global_mouse_position()
-		return
-	puszczenie(wskazane_pole)
-
-func stan_select(wskazane_pole):
-	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		return
-	stan = stany.IDLE
-
-func puszczenie(wskazane_pole):
-	if wskazane_pole == poczatkowe_pole:
-		wybrana = chwycona
-		wybrana.global_position = plansza.map_to_local(poczatkowe_pole)
-		stan = stany.SELECT
-		stan = stany.IDLE
-	else:
-		$dzwiek/zakaz.play()
-		chwycona.global_position = plansza.map_to_local(poczatkowe_pole)
-		stan = stany.IDLE
-	chwycona.top_level = false
-	chwycona = null
-
-
-func pozycja(figura):
+func pozycja(figura) -> Vector2i:
 	return plansza.local_to_map(figura.global_position)
 
-func dodaj(typ_figury, kolor, pole:Vector2i):
-	var figura = preload("res://scenes/figura.tscn").instantiate()
-	figura.typ = typ_figury
-	figura.name = typ_figury
-	figura.kolor = kolor
-	add_child(figura)
-	figury.append(figura)
-	figura.global_position = plansza.map_to_local(pole)
-
-func pole_na_planszy(pole:Vector2i):
-	if pole in dostepne_pola:
-		return true
-	return false
-
-func stoi_figura(pole:Vector2i, wykluczona=null):
+func stoi_figura(pole: Vector2i):
 	for figura in figury:
-		if figura.global_position == plansza.map_to_local(pole) and figura != wykluczona:
+		if pozycja(figura) == pole:
 			return figura
+	return null
 
-func generacja_pol(x,y,width,height):
-	for w in range(x,width+1):
-		for h in range(y,height+1):
+func pole_na_planszy(pole: Vector2i) -> bool:
+	return pole in dostepne_pola
+
+func generacja_pol(x: int, y: int, width: int, height: int) -> void:
+	for w in range(x, width + 1):
+		for h in range(y, height + 1):
 			dostepne_pola.append(Vector2i(w, h))
 
-func reset():
+func reset() -> void:
 	for figura in figury:
 		figura.queue_free()
 	figury.clear()
 
-func _on_reset_pressed() -> void:
+func synchronizacja() -> void:
 	reset()
-	PozycjaOsobista.ustawienia_bialych.clear()
-	PozycjaOsobista.ustawienia_czarnych.clear()
+	for ustawienie in PozycjaOsobista.ustawienie:
+		dodaj(ustawienie[0], ustawienie[1])
 
+func _on_reset_pressed() -> void:
+	_cancel_drag()
+	reset()
+	PozycjaOsobista.ustawienie.clear()
 
 func _on_menu_pressed() -> void:
-	if not ma_krola("b") or not ma_krola("c"):
+	if not ma_krola():
 		$dzwiek/zakaz.play()
 		return
 	get_tree().change_scene_to_file("res://scenes/menu glowne.tscn")
-
-
-func _on_zmiana_kolorow_pressed() -> void:
-	if kolor_posuniecia == "b":
-		kolor_posuniecia = "c"
-	else:
-		kolor_posuniecia = "b"
-	synchronizacja()
-
-func synchronizacja():
-	reset()
-	if kolor_posuniecia == "b":
-		for figura in PozycjaOsobista.ustawienia_bialych:
-			dodaj(figura[0], "b", figura[1])
-	else:
-		for figura in PozycjaOsobista.ustawienia_czarnych:
-			dodaj(figura[0], "c", figura[1])
-	$PieceMenu.create_menu()

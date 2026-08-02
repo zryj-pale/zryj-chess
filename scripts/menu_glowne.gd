@@ -11,7 +11,6 @@ func _ready() -> void:
 
 func _on_robcza_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
-<<<<<<< HEAD
 
 
 func _on_video_stream_player_finished() -> void:
@@ -25,5 +24,3 @@ func _on_ustawianie_pressed() -> void:
 
 func _on_online_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/lobby.tscn")
-=======
->>>>>>> parent of 01d08f7 (dodano różne rzeczy)
