@@ -41,13 +41,13 @@ func _on_peer_found() -> void:
 
 func _on_transport_ready(mode: String) -> void:
 	status_label.text = "Połączenie: " + ("bezpośrednie P2P." if mode == "direct" else "przez VPS (relay).") + "\nSynchronizowanie ustawień…"
-	NetworkManager.send_ready(_own_pieces())
+	NetworkManager.send_ready(_own_pieces(), PozycjaOsobista.wybrana_karta)
 
-func _on_remote_ready(pieces: Array) -> void:
+func _on_remote_ready(pieces: Array, card: String) -> void:
 	if NetworkManager.is_host:
-		NetworkManager.start_game(_own_pieces(), pieces)
+		NetworkManager.start_game(_own_pieces(), pieces, PozycjaOsobista.wybrana_karta, card)
 
-func _on_game_started(_white_pieces: Array, _black_pieces: Array, _coin: String, _turn: String) -> void:
+func _on_game_started(_white_pieces: Array, _black_pieces: Array, _coin: String, _turn: String, _white_card: String, _black_card: String) -> void:
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
 func _own_pieces() -> Array:

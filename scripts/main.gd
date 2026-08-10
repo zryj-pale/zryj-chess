@@ -2,7 +2,7 @@ extends Node2D
 
 @onready var plansza: TileMapLayer = $TileMapLayer
 
-enum Stany { IDLE, GRAB, SELECT, PLACEMENT }
+enum Stany { IDLE, GRAB, SELECT, PLACEMENT, DUCK }
 const OKNO = preload("res://scenes/okno_rzutu.tscn")
 
 var stan := Stany.IDLE
@@ -20,20 +20,27 @@ var input_enabled := false
 var coin_window = null
 var remote_coin_launch_pending := false
 var _prev_mouse_pressed := false
+var active_cards := {"b": "", "c": ""}
+var duck_position := Vector2i(-99, -99)
+var duck_pending := false
+var duck_marker: Label
 
 func _ready() -> void:
 	add_to_group("game_main")
 	generacja_pol(6)
 	if NetworkManager.is_online:
 		my_color = "b" if NetworkManager.is_host else "c"
+		active_cards = {"b": NetworkManager.white_card, "c": NetworkManager.black_card}
 		NetworkManager.action_received.connect(_on_network_action)
 		NetworkManager.player_disconnected.connect(_on_player_disconnected)
 		ustawienie_z_pozycji(NetworkManager.white_pieces, NetworkManager.black_pieces)
 		start_online_match()
 	else:
+		active_cards = {"b": PozycjaOsobista.wybrana_karta, "c": PozycjaOsobista.wybrana_karta}
 		ustawienie_z_pozycji([], [])
 		start_local_match()
 	$"dzwiek/muzyka w tle".play()
+	_create_duck_marker()
 
 func ustawienie_z_pozycji(white: Array, black: Array) -> void:
 	if NetworkManager.is_online:
@@ -85,9 +92,13 @@ func _process(_delta: float) -> void:
 		Stany.GRAB: stan_grab(pole, pressed)
 		Stany.SELECT: stan_select(pole, pressed)
 		Stany.PLACEMENT: stan_placement(pole, pressed)
+		Stany.DUCK: stan_duck(pole, pressed)
 	_prev_mouse_pressed = pressed
 
 func stan_idle(_pole: Vector2i, pressed: bool) -> void:
+	if duck_pending:
+		stan = Stany.DUCK
+		return
 	if NetworkManager.is_online and kolor_posuniecia != my_color:
 		return
 	if Input.is_action_just_pressed("space"):
@@ -150,6 +161,18 @@ func stan_placement(pole: Vector2i, pressed: bool) -> void:
 			$dzwiek/zakaz.play()
 		stan = Stany.IDLE
 
+func stan_duck(pole: Vector2i, pressed: bool) -> void:
+	if NetworkManager.is_online and kolor_posuniecia != my_color:
+		return
+	if pressed and not _prev_mouse_pressed:
+		if _can_place_duck(pole):
+			if NetworkManager.is_online:
+				NetworkManager.submit_action({"type": "duck", "x": pole.x, "y": pole.y})
+			_apply_duck(pole)
+			_finish_after_move(kolor_posuniecia)
+		else:
+			$dzwiek/zakaz.play()
+
 func ruch(figura, cel: Vector2i, from_network := false) -> bool:
 	if not figura or game_finished or figura.kolor != kolor_posuniecia:
 		return false
@@ -171,13 +194,31 @@ func _apply_move(figura, cel: Vector2i) -> void:
 	if moze_promowac(figura):
 		figura.promocja("H")
 	$dzwiek/ruch.play()
+	var mover := kolor_posuniecia
+	if CardRegistry.has(active_cards, mover, "racing_kings") and GameRules.reached_opposite_edge(_rules_pieces(), dostepne_pola, mover):
+		koniec_gry(mover)
+		return
+	if CardRegistry.any_has(active_cards, "duck_chess"):
+		duck_pending = true
+		stan = Stany.DUCK
+		return
+	_finish_after_move(mover)
+
+func _finish_after_move(mover: String) -> void:
+	duck_pending = false
+	stan = Stany.IDLE
+	if CardRegistry.has(active_cards, mover, "check_adds_tile") and GameRules.king_count(_rules_pieces(), GameRules.other_color(mover)) == 1 and czy_szach(GameRules.other_color(mover)):
+		if mover == "b":
+			bialy_tiles += 1
+		else:
+			czarny_tiles += 1
 	koniec_tury()
 	if czy_szach(kolor_posuniecia):
 		$dzwiek/szach.play()
-		if not GameRules.has_legal_move(_rules_pieces(), dostepne_pola, kolor_posuniecia):
+		if not GameRules.has_legal_move(_rules_pieces(), dostepne_pola, kolor_posuniecia, active_cards, duck_position):
 			koniec_gry(GameRules.other_color(kolor_posuniecia))
-	elif not GameRules.has_legal_move(_rules_pieces(), dostepne_pola, kolor_posuniecia):
-		koniec_gry()
+	elif not GameRules.has_legal_move(_rules_pieces(), dostepne_pola, kolor_posuniecia, active_cards, duck_position):
+		koniec_gry(GameRules.stalemate_winner(active_cards, kolor_posuniecia))
 
 func _apply_tile(pole: Vector2i) -> void:
 	dodaj_pole(pole)
@@ -204,6 +245,11 @@ func _on_network_action(action: Dictionary) -> void:
 			var pole := Vector2i(int(action.get("x", -99)), int(action.get("y", -99)))
 			if kolor_posuniecia != my_color and not pole_na_planszy(pole) and pole_w_granicach(pole):
 				_apply_tile(pole)
+		"duck":
+			var duck_target := Vector2i(int(action.get("x", -99)), int(action.get("y", -99)))
+			if kolor_posuniecia != my_color and duck_pending and _can_place_duck(duck_target):
+				_apply_duck(duck_target)
+				_finish_after_move(kolor_posuniecia)
 		"game_over":
 			koniec_gry(str(action.get("winner", "")), true)
 
@@ -216,10 +262,10 @@ func _on_player_disconnected(_reason: String) -> void:
 func moze_ruszyc(figura, cel: Vector2i) -> bool:
 	var pieces := _rules_pieces()
 	var index := GameRules.piece_index_at(pieces, pozycja(figura))
-	return GameRules.is_legal_move(pieces, dostepne_pola, index, cel)
+	return GameRules.is_legal_move(pieces, dostepne_pola, index, cel, active_cards, duck_position)
 
 func czy_szach(kolor: String) -> bool:
-	return GameRules.is_in_check(_rules_pieces(), dostepne_pola, kolor)
+	return GameRules.is_in_check(_rules_pieces(), dostepne_pola, kolor, active_cards, duck_position)
 
 func _rules_pieces() -> Array:
 	var result: Array = []
@@ -281,6 +327,25 @@ func dodaj_pole(pole: Vector2i) -> void:
 		return
 	plansza.set_cell(pole, 0, pole)
 	dostepne_pola.append(pole)
+
+func _create_duck_marker() -> void:
+	duck_marker = Label.new()
+	duck_marker.text = "🦆"
+	duck_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	duck_marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	duck_marker.size = Vector2(64, 64)
+	duck_marker.position = Vector2(-999, -999)
+	duck_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	duck_marker.add_theme_font_size_override("font_size", 34)
+	add_child(duck_marker)
+
+func _can_place_duck(pole: Vector2i) -> bool:
+	return pole_na_planszy(pole) and stoi_figura(pole) == null and not GameRules.is_in_check(_rules_pieces(), dostepne_pola, kolor_posuniecia, active_cards, pole)
+
+func _apply_duck(pole: Vector2i) -> void:
+	duck_position = pole
+	duck_marker.position = plansza.map_to_local(pole) - Vector2(32, 32)
+	$dzwiek/ruch.play()
 
 func koniec_tury() -> void:
 	kolor_posuniecia = GameRules.other_color(kolor_posuniecia)

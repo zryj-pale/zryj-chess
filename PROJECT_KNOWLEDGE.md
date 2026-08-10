@@ -202,7 +202,7 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 
 ### Niezaimplementowane
 
-- System kart.
+- System pierwszych pięciu kart: wybór jednej karty, synchronizacja online, HUD oraz hooki silnika dla ruchu, bicia, blokad, pata, zwycięstwa i efektu po ruchu.
 - Kampania, fabuła, bossowie, progresja i odblokowania.
 - Doprecyzowany balans armii, kart oraz planszy.
 - Produkcyjny hosting i konfiguracja sieci.
