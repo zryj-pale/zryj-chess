@@ -81,8 +81,15 @@ Stałe elementy wizualne:
 
 - klasyczna siatka szachownicy jako czytelna baza;
 - rozpoznawalne figury i wyraźna informacja o turze;
-- glitch, artefakty kompresji, nietypowe kolory, błędne fonty i zakłócenia jako warstwa „infekcji”;
+- glitch, artefakty kompresji, nietypowe kolory, błędne fonty i zakłócenia jako warstwa „infekcji";
 - efekty dopasowane do mechaniki karty (np. odbijający się goniec zostawia ślad odbicia).
+
+### Nicki i kolor meczu
+
+- Każdy gracz podaje niepusty nick w menu głównym; jest on zapamiętywany lokalnie.
+- Nick po przycięciu spacji i zamianie na małe litery jest haszowany SHA-256, a pierwsze trzy bajty hasha wyznaczają stały, nasycony kolor HSV gracza.
+- W online nicki są synchronizowane razem z ustawieniem i kartą; host jest białymi, gość czarnymi. W lokalnym prototypie oba kolory używają nicku jednego gracza.
+- Tło meczu jest płynną mieszanką obu kolorów. Udziały są dokładnie proporcjonalne do aktualnej wartości figur na planszy (P=1, S/G=2, W=4, H/K=6); przy 0:0 używa mieszanki 50:50. Karty, pola i kaczka nie wpływają na tę wartość.
 
 **Granica:** grafika może być dziwna, ale nigdy nie może ukrywać pola, legalnego ruchu, stanu figury ani tury.
 
@@ -191,18 +198,19 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 ### Gotowe lub częściowo gotowe
 
 - Projekt Godot 4.7 w trybie renderowania Mobile.
-- Menu, intro wideo i audio.
+- Menu, intro wideo i audio oraz wymagany, zapamiętywany nick gracza.
 - Kreator neutralnego ustawienia figur z budżetem punktowym.
+- Wybór jednej karty na gracza, pięć pierwszych efektów i synchronizacja kart online.
 - Lokalna rozgrywka na 6×6 z możliwością poszerzania do 8×8.
 - Walidacja ruchów, szach/mat/pat, promocja oraz obsługa wielu króli.
-- HUD liczby pozostałych pól.
+- HUD liczby pozostałych pól i nicków obu stron.
+- Animowane tło meczu, barwione dynamicznie mieszanką kolorów wygenerowanych z nicków i aktualnego materiału.
 - Lobby online, synchronizacja ruchów/dodawanych pól, początkowego układu i rzutu monety.
 - Własny protokół UDP z potwierdzeniami i retransmisją.
 - Zamykanie pokoju po meczu: klient hosta wysyła `GAME_CLOSE`, a serwer usuwa pokój i powiadamia gościa.
 
 ### Niezaimplementowane
 
-- System pierwszych pięciu kart: wybór jednej karty, synchronizacja online, HUD oraz hooki silnika dla ruchu, bicia, blokad, pata, zwycięstwa i efektu po ruchu.
 - Kampania, fabuła, bossowie, progresja i odblokowania.
 - Doprecyzowany balans armii, kart oraz planszy.
 - Produkcyjny hosting i konfiguracja sieci.
@@ -229,12 +237,12 @@ Repozytorium zawiera znaczące lokalne, niezatwierdzone zmiany w aktualnej wersj
 
 | Komponent | Odpowiedzialność |
 | --- | --- |
-| `main.gd` | Stan meczu, ruchy, walidacja, tury, szach/mat/pat, rozszerzanie planszy, akcje sieciowe. |
+| `main.gd` | Stan meczu, ruchy, walidacja, tury, szach/mat/pat, rozszerzanie planszy, akcje sieciowe i dynamiczna barwa tła zależna od materiału. |
 | `game_rules.gd` | Czysty silnik zasad: generowanie ruchów, ataki, szach, wielokrólewskość, mata/pat i losowanie bezpiecznej pozycji startowej. |
 | `ustawianie.gd` | Kreator armii, budżet punktów, drag-and-drop, zapis neutralnego układu. |
-| `network_manager.gd` | Pokoje online, P2P hole punching, relay, niezawodne przesyłanie akcji. |
+| `network_manager.gd` | Pokoje online, P2P hole punching, relay, niezawodne przesyłanie akcji oraz synchronizacja nicków. |
 | `lobby.gd` | Interfejs tworzenia i dołączania do pokoju. |
-| `pozycja_osobista.gd` | Autoload przechowujący układ przygotowany przez gracza. |
+| `pozycja_osobista.gd` | Autoload przechowujący układ, kartę, profil nicku i deterministyczny kolor gracza. |
 | `figura.gd` | Prezentacja figury, hitbox, typ, kolor i promocja. |
 | `hud.gd` | Liczniki dodatkowych pól i wizualizacja aktualnej tury. |
 | `rzut_moneta.gd`, `control.gd` | Zsynchronizowana, pełnoekranowa prezentacja rzutu monety 3D oraz przywracanie globalnych ustawień czasu/fizyki. |

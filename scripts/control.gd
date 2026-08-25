@@ -1,7 +1,7 @@
 extends Control
 @export var wyrzucona = null
 signal koniec_rzutu
-signal throw_started
+signal throw_started(throw_seed: int)
 
 var forced_result := "orzel"
 var can_launch := true
@@ -12,7 +12,7 @@ func _ready() -> void:
 	call_deferred("_set_viewport_size")
 	get_viewport().size_changed.connect(_set_viewport_size)
 	$SubViewportContainer/SubViewport/Node3D.configure(forced_result, can_launch)
-	$SubViewportContainer/SubViewport/Node3D.throw_started.connect(func(): throw_started.emit())
+	$SubViewportContainer/SubViewport/Node3D.throw_started.connect(func(throw_seed: int): throw_started.emit(throw_seed))
 
 func _set_viewport_size() -> void:
 	var screen_size := get_viewport().get_visible_rect().size
@@ -31,8 +31,8 @@ func configure(result: String, allow_launch: bool) -> void:
 	if is_node_ready():
 		$SubViewportContainer/SubViewport/Node3D.configure(forced_result, can_launch)
 
-func launch() -> void:
-	$SubViewportContainer/SubViewport/Node3D.launch()
+func launch(throw_seed := -1) -> void:
+	$SubViewportContainer/SubViewport/Node3D.launch(throw_seed)
 
 func _on_wyrzucona(strona: Variant) -> void:
 	wyrzucona = strona

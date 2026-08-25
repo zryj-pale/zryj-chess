@@ -3,6 +3,7 @@ extends Node2D
 @onready var plansza: TileMapLayer = $TileMapLayer
 @onready var progress_bar: ProgressBar = $ProgressBar
 @onready var punkty_label: Label = $PunktyLabel
+@onready var cards_toggle: Button = $CardsToggle
 
 const MAX_PUNKTY := 16
 const SZARY_KOLOR := Color(0.55, 0.55, 0.55, 1.0)
@@ -18,11 +19,13 @@ var drag_origin := Vector2i.ZERO
 var drag_moved := false
 var card_buttons: Dictionary = {}
 var selected_card_label: Label
+var card_panel: VBoxContainer
 
 func _ready() -> void:
 	generacja_pol(1, 4, 6, 6)
 	synchronizacja()
 	_create_card_panel()
+	cards_toggle.pressed.connect(_on_cards_toggle_pressed)
 
 func _process(_delta: float) -> void:
 	if dragging:
@@ -202,16 +205,17 @@ func _on_menu_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/menu glowne.tscn")
 
 func _create_card_panel() -> void:
-	var panel := VBoxContainer.new()
-	panel.position = Vector2(10, 105)
-	panel.size = Vector2(492, 140)
-	panel.add_theme_constant_override("separation", 1)
+	card_panel = VBoxContainer.new()
+	card_panel.position = Vector2(10, 155)
+	card_panel.size = Vector2(492, 140)
+	card_panel.add_theme_constant_override("separation", 1)
+	card_panel.visible = false
 	var title := Label.new()
 	title.text = "Wybierz jedną kartę (kliknij aktywną ponownie, aby odznaczyć)"
 	title.add_theme_font_size_override("font_size", 11)
-	panel.add_child(title)
+	card_panel.add_child(title)
 	selected_card_label = Label.new()
-	panel.add_child(selected_card_label)
+	card_panel.add_child(selected_card_label)
 	for id in CardRegistry.all_ids():
 		var button := Button.new()
 		button.text = CardRegistry.display_name(id) + " — " + CardRegistry.description(id)
@@ -221,10 +225,14 @@ func _create_card_panel() -> void:
 		button.custom_minimum_size = Vector2(0, 18)
 		button.add_theme_font_size_override("font_size", 10)
 		button.pressed.connect(_on_card_pressed.bind(id))
-		panel.add_child(button)
+		card_panel.add_child(button)
 		card_buttons[id] = button
-	add_child(panel)
+	add_child(card_panel)
 	_refresh_cards()
+
+func _on_cards_toggle_pressed() -> void:
+	card_panel.visible = not card_panel.visible
+	cards_toggle.text = "Ukryj karty" if card_panel.visible else "Wybierz kartę"
 
 func _on_card_pressed(id: String) -> void:
 	PozycjaOsobista.wybrana_karta = "" if PozycjaOsobista.wybrana_karta == id else id

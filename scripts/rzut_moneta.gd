@@ -4,7 +4,7 @@ extends Node3D
 @onready var ray_cast_3d: RayCast3D = $moneta/RayCast3D
 
 signal wyrzucona(strona)
-signal throw_started
+signal throw_started(throw_seed: int)
 
 var forced_result := ""
 var can_launch := true
@@ -49,18 +49,29 @@ func _input(_event: InputEvent) -> void:
 	if can_launch and Input.is_action_just_pressed("space"):
 		launch()
 
-func launch() -> void:
+func launch(throw_seed := -1) -> void:
 	if moneta.rzucona:
 		return
-	rzut(moneta, 150, 12)
-	throw_started.emit()
+	# Both clients receive the same seed from the host.  The resulting impulse
+	# and spin are therefore identical instead of relying on local randf_range().
+	if throw_seed < 0:
+		throw_seed = randi()
+	rzut(moneta, 150, 12, throw_seed)
+	throw_started.emit(throw_seed)
 
 func nieruchomy(obiekt, tolerancja):
 	if abs(obiekt.linear_velocity[0]) < tolerancja and abs(obiekt.linear_velocity[1]) < tolerancja and abs(obiekt.linear_velocity[2]) < tolerancja:
 		return true
 	return false
 
-func rzut(obiekt, sila_wyrzutu, zakres_obrotu):
+func rzut(obiekt, sila_wyrzutu, zakres_obrotu, throw_seed: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = throw_seed
 	moneta.rzucona = true
-	obiekt.linear_velocity.y = sila_wyrzutu
-	obiekt.angular_velocity = Vector3(randf_range(-zakres_obrotu,zakres_obrotu), randf_range(-zakres_obrotu,zakres_obrotu), randf_range(-zakres_obrotu,zakres_obrotu))
+	obiekt.freeze = false
+	obiekt.linear_velocity = Vector3(0, sila_wyrzutu, 0)
+	obiekt.angular_velocity = Vector3(
+		rng.randf_range(-zakres_obrotu, zakres_obrotu),
+		rng.randf_range(-zakres_obrotu, zakres_obrotu),
+		rng.randf_range(-zakres_obrotu, zakres_obrotu)
+	)

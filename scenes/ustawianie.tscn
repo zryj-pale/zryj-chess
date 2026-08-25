@@ -141,6 +141,13 @@ offset_bottom = 122.0
 text = "Twoje neutralne ustawienie"
 horizontal_alignment = 1
 
+[node name="CardsToggle" type="Button" parent="."]
+offset_left = 158.0
+offset_top = 122.0
+offset_right = 354.0
+offset_bottom = 150.0
+text = "Wybierz kartę"
+
 [node name="PieceMenu" parent="." instance=ExtResource("8_menu")]
 
 [node name="ProgressBar" type="ProgressBar" parent="."]

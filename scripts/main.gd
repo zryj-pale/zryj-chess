@@ -4,6 +4,9 @@ extends Node2D
 
 enum Stany { IDLE, GRAB, SELECT, PLACEMENT, DUCK }
 const OKNO = preload("res://scenes/okno_rzutu.tscn")
+const DUCK_TEXTURE = preload("res://assets/duck.png")
+const MAIN_MENU_BACKGROUND = preload("res://scenes/tlo_ekranu_glownego.tscn")
+const MATERIAL_VALUES := {"P": 1, "S": 2, "G": 2, "W": 4, "H": 6, "K": 6}
 
 var stan := Stany.IDLE
 var figury: Array = []
@@ -18,29 +21,67 @@ var czarny_tiles := 2
 var game_finished := false
 var input_enabled := false
 var coin_window = null
-var remote_coin_launch_pending := false
+var remote_coin_launch_seed := -1
 var _prev_mouse_pressed := false
 var active_cards := {"b": "", "c": ""}
 var duck_position := Vector2i(-99, -99)
 var duck_pending := false
-var duck_marker: Label
+var duck_marker: Sprite2D
+var match_background = null
+var player_nicknames := {"b": "", "c": ""}
+var player_colors := {"b": Color.WHITE, "c": Color.WHITE}
 
 func _ready() -> void:
 	add_to_group("game_main")
+	_add_menu_background()
 	generacja_pol(6)
 	if NetworkManager.is_online:
 		my_color = "b" if NetworkManager.is_host else "c"
 		active_cards = {"b": NetworkManager.white_card, "c": NetworkManager.black_card}
+		player_nicknames = {"b": NetworkManager.white_nickname, "c": NetworkManager.black_nickname}
 		NetworkManager.action_received.connect(_on_network_action)
 		NetworkManager.player_disconnected.connect(_on_player_disconnected)
 		ustawienie_z_pozycji(NetworkManager.white_pieces, NetworkManager.black_pieces)
 		start_online_match()
 	else:
 		active_cards = {"b": PozycjaOsobista.wybrana_karta, "c": PozycjaOsobista.wybrana_karta}
+		player_nicknames = {"b": PozycjaOsobista.nickname, "c": PozycjaOsobista.nickname}
 		ustawienie_z_pozycji([], [])
 		start_local_match()
 	$"dzwiek/muzyka w tle".play()
 	_create_duck_marker()
+	_refresh_player_colors()
+	_refresh_background_tint()
+
+func _add_menu_background() -> void:
+	match_background = MAIN_MENU_BACKGROUND.instantiate()
+	# The source scene uses positive local z-indices, so place its root well
+	# behind the board, pieces and HUD while retaining its menu animation.
+	match_background.z_index = -10
+	add_child(match_background)
+
+func _refresh_player_colors() -> void:
+	player_colors = {
+		"b": PozycjaOsobista.nickname_color(str(player_nicknames.get("b", ""))),
+		"c": PozycjaOsobista.nickname_color(str(player_nicknames.get("c", "")))
+	}
+
+func _refresh_background_tint() -> void:
+	if not match_background:
+		return
+	var white_points := _material_points("b")
+	var black_points := _material_points("c")
+	var total := white_points + black_points
+	var black_weight := 0.5 if total == 0 else float(black_points) / float(total)
+	var tint: Color = player_colors["b"].lerp(player_colors["c"], black_weight)
+	match_background.set_match_tint(tint)
+
+func _material_points(color: String) -> int:
+	var total := 0
+	for figura in figury:
+		if figura.kolor == color:
+			total += int(MATERIAL_VALUES.get(str(figura.typ), 0))
+	return total
 
 func ustawienie_z_pozycji(white: Array, black: Array) -> void:
 	if NetworkManager.is_online:
@@ -68,13 +109,13 @@ func _show_coin(result: String, can_launch: bool) -> void:
 	coin_window.throw_started.connect(_on_coin_throw_started)
 	coin_window.koniec_rzutu.connect(_on_coin_finished)
 	add_child(coin_window)
-	if remote_coin_launch_pending:
-		coin_window.launch()
-		remote_coin_launch_pending = false
+	if remote_coin_launch_seed >= 0:
+		coin_window.launch(remote_coin_launch_seed)
+		remote_coin_launch_seed = -1
 
-func _on_coin_throw_started() -> void:
+func _on_coin_throw_started(throw_seed: int) -> void:
 	if NetworkManager.is_online and NetworkManager.is_host:
-		NetworkManager.submit_action({"type": "coin_launch"})
+		NetworkManager.submit_action({"type": "coin_launch", "seed": throw_seed})
 
 func _on_coin_finished() -> void:
 	input_enabled = true
@@ -128,11 +169,13 @@ func stan_grab(pole: Vector2i, pressed: bool) -> void:
 		wybrana = chwycona
 		stan = Stany.SELECT
 	elif ruch(chwycona, pole):
-		stan = Stany.IDLE
+		if not duck_pending:
+			stan = Stany.IDLE
 	else:
 		$dzwiek/zakaz.play()
 		wybrana = null
-		stan = Stany.IDLE
+		if not duck_pending:
+			stan = Stany.IDLE
 	chwycona = null
 
 func stan_select(pole: Vector2i, pressed: bool) -> void:
@@ -145,7 +188,8 @@ func stan_select(pole: Vector2i, pressed: bool) -> void:
 	if not ruch(wybrana, pole):
 		wybrana = null
 		$dzwiek/zakaz.play()
-	stan = Stany.IDLE
+	if not duck_pending:
+		stan = Stany.IDLE
 
 func stan_placement(pole: Vector2i, pressed: bool) -> void:
 	if Input.is_action_just_pressed("space"):
@@ -174,7 +218,7 @@ func stan_duck(pole: Vector2i, pressed: bool) -> void:
 			$dzwiek/zakaz.play()
 
 func ruch(figura, cel: Vector2i, from_network := false) -> bool:
-	if not figura or game_finished or figura.kolor != kolor_posuniecia:
+	if not figura or game_finished or duck_pending or figura.kolor != kolor_posuniecia:
 		return false
 	if not from_network and NetworkManager.is_online and figura.kolor != my_color:
 		return false
@@ -193,6 +237,7 @@ func _apply_move(figura, cel: Vector2i) -> void:
 	figura.global_position = plansza.map_to_local(cel)
 	if moze_promowac(figura):
 		figura.promocja("H")
+	_refresh_background_tint()
 	$dzwiek/ruch.play()
 	var mover := kolor_posuniecia
 	if CardRegistry.has(active_cards, mover, "racing_kings") and GameRules.reached_opposite_edge(_rules_pieces(), dostepne_pola, mover):
@@ -231,10 +276,13 @@ func _on_network_action(action: Dictionary) -> void:
 	match action.get("type", ""):
 		"coin_launch":
 			if not NetworkManager.is_host:
+				var throw_seed := int(action.get("seed", -1))
+				if throw_seed < 0:
+					return
 				if coin_window:
-					coin_window.launch()
+					coin_window.launch(throw_seed)
 				else:
-					remote_coin_launch_pending = true
+					remote_coin_launch_seed = throw_seed
 		"move":
 			var from := Vector2i(int(action.get("from_x", -99)), int(action.get("from_y", -99)))
 			var to := Vector2i(int(action.get("to_x", -99)), int(action.get("to_y", -99)))
@@ -329,22 +377,18 @@ func dodaj_pole(pole: Vector2i) -> void:
 	dostepne_pola.append(pole)
 
 func _create_duck_marker() -> void:
-	duck_marker = Label.new()
-	duck_marker.text = "🦆"
-	duck_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	duck_marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	duck_marker.size = Vector2(64, 64)
+	duck_marker = Sprite2D.new()
+	duck_marker.texture = DUCK_TEXTURE
+	duck_marker.scale = Vector2(0.28, 0.28)
 	duck_marker.position = Vector2(-999, -999)
-	duck_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	duck_marker.add_theme_font_size_override("font_size", 34)
 	add_child(duck_marker)
 
 func _can_place_duck(pole: Vector2i) -> bool:
-	return pole_na_planszy(pole) and stoi_figura(pole) == null and not GameRules.is_in_check(_rules_pieces(), dostepne_pola, kolor_posuniecia, active_cards, pole)
+	return pole_na_planszy(pole) and pole != duck_position and stoi_figura(pole) == null and not GameRules.is_in_check(_rules_pieces(), dostepne_pola, kolor_posuniecia, active_cards, pole)
 
 func _apply_duck(pole: Vector2i) -> void:
 	duck_position = pole
-	duck_marker.position = plansza.map_to_local(pole) - Vector2(32, 32)
+	duck_marker.position = plansza.map_to_local(pole)
 	$dzwiek/ruch.play()
 
 func koniec_tury() -> void:
