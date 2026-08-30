@@ -5,8 +5,6 @@ const TLO_EKRANU_GLOWNEGO = preload("uid://tvwbs626pujp")
 @onready var nickname_input: LineEdit = $NicknameInput
 @onready var nickname_status: Label = $NicknameStatus
 @onready var nickname_label: Label = $NicknameLabel
-@onready var intro_video: VideoStreamPlayer = $VideoStreamPlayer
-@onready var intro_backdrop: ColorRect = $IntroBackdrop
 
 var tlo = null
 
@@ -21,26 +19,6 @@ func _ready() -> void:
 	_refresh_nickname_visibility()
 	_refresh_background_tint()
 	$muzyka.play()
-
-func _process(_delta: float) -> void:
-	if intro_video.visible:
-		_fit_intro_video()
-
-# The source video isn't square, so scaling its Control box directly (the
-# old `expand = true`) distorted the logo/text. Instead we let the player
-# size itself to the video's native resolution (expand = false) and scale
-# that as one uniform block, centered, so proportions stay correct while it
-# still covers the whole (now widescreen) window like a "background-size:
-# cover" fit.
-func _fit_intro_video() -> void:
-	var native := intro_video.size
-	if native.x <= 0.0 or native.y <= 0.0:
-		return
-	var viewport_size := get_viewport_rect().size
-	var factor := maxf(viewport_size.x / native.x, viewport_size.y / native.y)
-	intro_video.pivot_offset = native / 2.0
-	intro_video.scale = Vector2(factor, factor)
-	intro_video.position = viewport_size / 2.0
 
 func _refresh_background_tint() -> void:
 	tlo.set_match_tint(PozycjaOsobista.nickname_color(PozycjaOsobista.nickname))
@@ -68,8 +46,7 @@ func _on_robcza_pressed() -> void:
 
 func _on_video_stream_player_finished() -> void:
 	await get_tree().create_timer(1).timeout
-	intro_video.visible = false
-	intro_backdrop.visible = false
+	$VideoStreamPlayer.visible = false
 
 
 func _on_ustawianie_pressed() -> void:
