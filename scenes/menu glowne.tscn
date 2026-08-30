@@ -68,18 +68,26 @@ text = "Online"
 
 [node name="NicknameLabel" type="Label" parent="."]
 z_index = 6
-offset_left = 252.0
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+grow_horizontal = 0
+offset_left = -260.0
 offset_top = 10.0
-offset_right = 502.0
+offset_right = -10.0
 offset_bottom = 32.0
 text = "Twój nick"
 horizontal_alignment = 1
 
 [node name="NicknameInput" type="LineEdit" parent="."]
 z_index = 6
-offset_left = 252.0
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+grow_horizontal = 0
+offset_left = -260.0
 offset_top = 32.0
-offset_right = 502.0
+offset_right = -10.0
 offset_bottom = 64.0
 placeholder_text = "Wpisz nick"
 max_length = 32
@@ -87,9 +95,13 @@ alignment = 1
 
 [node name="NicknameStatus" type="Label" parent="."]
 z_index = 6
-offset_left = 252.0
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+grow_horizontal = 0
+offset_left = -260.0
 offset_top = 64.0
-offset_right = 502.0
+offset_right = -10.0
 offset_bottom = 88.0
 horizontal_alignment = 1
 
