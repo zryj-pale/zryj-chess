@@ -192,6 +192,9 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 - Lobby online, synchronizacja ruchów/dodawanych pól, początkowego układu i rzutu monety.
 - Własny protokół UDP z potwierdzeniami i retransmisją.
 - Zamykanie pokoju po meczu: klient hosta wysyła `GAME_CLOSE`, a serwer usuwa pokój i powiadamia gościa.
+- Efekty kart zaczepione przez generyczne hooki (`cards/card_hooks.gd`) zamiast sprawdzania konkretnych ID w `game_rules.gd`/`main.gd`, plus walidacja niekompatybilnych par kart przed startem meczu.
+- Testy jednostkowe silnika zasad w `tests/`, uruchamiane headlessowo bez otwierania edytora:
+  `godot --headless --path . --script res://tests/run_tests.gd` (kod wyjścia = liczba nieudanych asercji).
 
 ### Niezaimplementowane
 
