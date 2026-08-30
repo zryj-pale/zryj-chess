@@ -7,8 +7,8 @@ extends CanvasLayer
 func _process(_delta):
 	var main = get_tree().get_first_node_in_group("game_main")
 	if main:
-		bialy_label.text = str(main.player_nicknames.get("b", "Białe")) + " (białe): " + str(main.bialy_tiles)
-		czarny_label.text = str(main.player_nicknames.get("c", "Czarne")) + " (czarne): " + str(main.czarny_tiles)
+		bialy_label.text = "Białe (" + str(main.player_nicknames.get("b", "")) + "): " + str(main.bialy_tiles)
+		czarny_label.text = "Czarne (" + str(main.player_nicknames.get("c", "")) + "): " + str(main.czarny_tiles)
 		if main.kolor_posuniecia == "b":
 			bialy_label.modulate = Color.WHITE
 			czarny_label.modulate = Color.GRAY

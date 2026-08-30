@@ -6,8 +6,10 @@ const TLO_EKRANU_GLOWNEGO = preload("uid://tvwbs626pujp")
 @onready var nickname_status: Label = $NicknameStatus
 @onready var nickname_label: Label = $NicknameLabel
 
+var tlo = null
+
 func _ready() -> void:
-	var tlo = TLO_EKRANU_GLOWNEGO.instantiate()
+	tlo = TLO_EKRANU_GLOWNEGO.instantiate()
 	add_child(tlo)
 	nickname_input.text = PozycjaOsobista.nickname
 	nickname_input.text_changed.connect(_on_nickname_changed)
@@ -15,7 +17,11 @@ func _ready() -> void:
 	nickname_label.mouse_filter = Control.MOUSE_FILTER_STOP
 	nickname_label.gui_input.connect(_on_nickname_label_input)
 	_refresh_nickname_visibility()
+	_refresh_background_tint()
 	$muzyka.play()
+
+func _refresh_background_tint() -> void:
+	tlo.set_match_tint(PozycjaOsobista.nickname_color(PozycjaOsobista.nickname))
 
 # Pole nicku ma być widoczne tylko dopóki nick nie jest ustawiony; potem
 # chowa się, żeby nie zasłaniać reszty menu. Kliknięcie etykiety pozwala
@@ -61,6 +67,7 @@ func _save_nickname() -> bool:
 	if PozycjaOsobista.set_nickname(nickname_input.text):
 		nickname_input.text = PozycjaOsobista.nickname
 		_refresh_nickname_visibility()
+		_refresh_background_tint()
 		return true
 	nickname_status.text = "Wpisz nick, aby rozpocząć grę."
 	nickname_status.visible = true
