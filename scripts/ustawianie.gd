@@ -3,6 +3,7 @@ extends Node2D
 @onready var plansza: TileMapLayer = $TileMapLayer
 @onready var progress_bar: ProgressBar = $ProgressBar
 @onready var punkty_label: Label = $PunktyLabel
+@onready var cards_toggle: Button = $CardsToggle
 
 const MAX_PUNKTY := 16
 const SZARY_KOLOR := Color(0.55, 0.55, 0.55, 1.0)
@@ -13,14 +14,27 @@ var dostepne_pola: Array[Vector2i] = []
 var dragging := false
 var drag_piece_type := ""
 var drag_preview = null
+var dragged_figure = null
+var drag_origin := Vector2i.ZERO
+var drag_moved := false
+var card_buttons: Dictionary = {}
+var selected_card_label: Label
+var card_panel: VBoxContainer
 
 func _ready() -> void:
 	generacja_pol(1, 4, 6, 6)
 	synchronizacja()
+	_create_card_panel()
+	cards_toggle.pressed.connect(_on_cards_toggle_pressed)
 
 func _process(_delta: float) -> void:
-	if dragging and drag_preview:
-		drag_preview.global_position = get_global_mouse_position()
+	if dragging:
+		if dragged_figure:
+			dragged_figure.global_position = get_global_mouse_position()
+			if dragged_figure.global_position.distance_to(plansza.map_to_local(drag_origin)) > 4.0:
+				drag_moved = true
+		elif drag_preview:
+			drag_preview.global_position = get_global_mouse_position()
 	var punkty := oblicz_punkty()
 	progress_bar.value = punkty
 	punkty_label.text = str(punkty) + "/" + str(MAX_PUNKTY)
@@ -42,22 +56,68 @@ func _on_piece_selected(typ: String) -> void:
 	add_child(drag_preview)
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
+	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
 		return
 	if dragging:
+		if dragged_figure:
+			if not event.pressed:
+				_finish_figure_drag()
+			return
+		if not event.pressed:
+			return
 		var pole: Vector2i = plansza.local_to_map(get_global_mouse_position())
 		if pole_na_planszy(pole) and not stoi_figura(pole) and can_place(drag_piece_type):
 			dodaj(drag_piece_type, pole)
 			PozycjaOsobista.ustawienie.append([drag_piece_type, pole])
 		_cancel_drag()
 		return
+	if not event.pressed:
+		return
 	var figura = najechana_figura()
 	if figura:
-		usun_figure(figura)
+		_begin_figure_drag(figura)
+
+func _begin_figure_drag(figura) -> void:
+	dragging = true
+	dragged_figure = figura
+	drag_origin = pozycja(figura)
+	drag_moved = false
+	figura.top_level = true
+
+func _finish_figure_drag() -> void:
+	var figura = dragged_figure
+	var destination: Vector2i = plansza.local_to_map(get_global_mouse_position())
+	figura.global_position = plansza.map_to_local(drag_origin)
+	figura.top_level = false
+	var target = stoi_figura(destination)
+	if pole_na_planszy(destination) and (not target or target == figura):
+		if destination != drag_origin:
+			figura.global_position = plansza.map_to_local(destination)
+			_zapisz_przesuniecie(figura, drag_origin, destination)
+		elif not drag_moved:
+			usun_figure(figura)
+	elif destination != drag_origin:
+		$dzwiek/zakaz.play()
+	dragged_figure = null
+	dragging = false
+	drag_moved = false
+
+func _zapisz_przesuniecie(figura, from: Vector2i, to: Vector2i) -> void:
+	for index in range(PozycjaOsobista.ustawienie.size()):
+		var saved = PozycjaOsobista.ustawienie[index]
+		if saved[0] == figura.typ and saved[1] == from:
+			saved[1] = to
+			PozycjaOsobista.ustawienie[index] = saved
+			return
 
 func _cancel_drag() -> void:
+	if dragged_figure:
+		dragged_figure.global_position = plansza.map_to_local(drag_origin)
+		dragged_figure.top_level = false
+		dragged_figure = null
 	dragging = false
 	drag_piece_type = ""
+	drag_moved = false
 	if drag_preview:
 		drag_preview.queue_free()
 		drag_preview = null
@@ -143,3 +203,45 @@ func _on_menu_pressed() -> void:
 		$dzwiek/zakaz.play()
 		return
 	get_tree().change_scene_to_file("res://scenes/menu glowne.tscn")
+
+func _create_card_panel() -> void:
+	card_panel = VBoxContainer.new()
+	card_panel.position = Vector2(10, 155)
+	card_panel.size = Vector2(492, 140)
+	card_panel.add_theme_constant_override("separation", 1)
+	card_panel.visible = false
+	var title := Label.new()
+	title.text = "Wybierz jedną kartę (kliknij aktywną ponownie, aby odznaczyć)"
+	title.add_theme_font_size_override("font_size", 11)
+	card_panel.add_child(title)
+	selected_card_label = Label.new()
+	card_panel.add_child(selected_card_label)
+	for id in CardRegistry.all_ids():
+		var button := Button.new()
+		button.text = CardRegistry.display_name(id) + " — " + CardRegistry.description(id)
+		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.toggle_mode = true
+		button.custom_minimum_size = Vector2(0, 18)
+		button.add_theme_font_size_override("font_size", 10)
+		button.pressed.connect(_on_card_pressed.bind(id))
+		card_panel.add_child(button)
+		card_buttons[id] = button
+	add_child(card_panel)
+	_refresh_cards()
+
+func _on_cards_toggle_pressed() -> void:
+	card_panel.visible = not card_panel.visible
+	cards_toggle.text = "Ukryj karty" if card_panel.visible else "Wybierz kartę"
+
+func _on_card_pressed(id: String) -> void:
+	PozycjaOsobista.wybrana_karta = "" if PozycjaOsobista.wybrana_karta == id else id
+	_refresh_cards()
+
+func _refresh_cards() -> void:
+	if not selected_card_label:
+		return
+	selected_card_label.text = "Aktywna: " + CardRegistry.display_name(PozycjaOsobista.wybrana_karta)
+	for id in card_buttons:
+		var button: Button = card_buttons[id]
+		button.button_pressed = PozycjaOsobista.wybrana_karta == id

@@ -66,5 +66,32 @@ offset_right = 350.0
 offset_bottom = 340.0
 text = "Online"
 
+[node name="NicknameLabel" type="Label" parent="."]
+z_index = 6
+offset_left = 150.0
+offset_top = 238.0
+offset_right = 362.0
+offset_bottom = 260.0
+text = "Twój nick"
+horizontal_alignment = 1
+
+[node name="NicknameInput" type="LineEdit" parent="."]
+z_index = 6
+offset_left = 150.0
+offset_top = 260.0
+offset_right = 362.0
+offset_bottom = 292.0
+placeholder_text = "Wpisz nick"
+max_length = 32
+alignment = 1
+
+[node name="NicknameStatus" type="Label" parent="."]
+z_index = 6
+offset_left = 100.0
+offset_top = 396.0
+offset_right = 412.0
+offset_bottom = 420.0
+horizontal_alignment = 1
+
 [connection signal="pressed" from="ustawianie" to="." method="_on_ustawianie_pressed"]
 [connection signal="pressed" from="Online" to="." method="_on_online_pressed"]
