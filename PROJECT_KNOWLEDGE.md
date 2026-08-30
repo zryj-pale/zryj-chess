@@ -27,7 +27,7 @@
 
 Najkrótsza definicja produktu:
 
-> Szachy zainfekowane złośliwym oprogramowaniem: gracze budują własne, nieuczciwe kombinacje zasad i próbują przetrwać ich konsekwencje.
+> Szachowy sandbox: gracze budują własne, nieuczciwe kombinacje zasad i próbują przetrwać ich konsekwencje. Klimat i styl wizualny nie są jeszcze ustalone.
 
 Docelowe filary:
 
@@ -59,32 +59,23 @@ Gra ma dawać uczucie: „znam szachy, ale świat właśnie przestał przestrzeg
 
 ## 3. Klimat, fabuła i styl wizualny
 
-### Motyw świata
+### Motyw świata i kierunek graficzny
 
-Oficjalne, klasyczne szachy zostały zmodyfikowane lub zainfekowane przez złośliwe oprogramowanie. Reguły, figury i interfejs zaczynają zachowywać się niezgodnie z regulaminem.
+Nieustalone. Wcześniejsza koncepcja klimatu i fabuły (m.in. skojarzenia z zainfekowanym/złośliwym oprogramowaniem) była tylko jednym z rozważanych kierunków i nie jest obecnie przyjęta — zespół nie jest jeszcze pewien estetyki gry. Do czasu decyzji obowiązują tylko stałe elementy wizualne poniżej.
 
-Karty mogą być przedstawiane jako:
-
-- exploity;
-- błędy reguł;
-- uszkodzone moduły;
-- nieautoryzowane patche;
-- fragmenty wirusa lub odzyskane dane.
-
-Bossowie kampanii powinni być uszkodzonymi komponentami systemu, anomaliami albo administratorami/antywirusem próbującymi przejąć kontrolę nad zainfekowaną grą.
-
-### Kierunek graficzny
-
-Styl ma wyglądać jak celowo chaotyczny zbiór tekstur, zachowujący jeden psychodeliczny klimat. Nie jest to realizm ani klasyczne fantasy.
-
-Stałe elementy wizualne:
+Stałe elementy wizualne, niezależne od finalnego stylu:
 
 - klasyczna siatka szachownicy jako czytelna baza;
-- rozpoznawalne figury i wyraźna informacja o turze;
-- glitch, artefakty kompresji, nietypowe kolory, błędne fonty i zakłócenia jako warstwa „infekcji”;
-- efekty dopasowane do mechaniki karty (np. odbijający się goniec zostawia ślad odbicia).
+- rozpoznawalne figury i wyraźna informacja o turze.
 
-**Granica:** grafika może być dziwna, ale nigdy nie może ukrywać pola, legalnego ruchu, stanu figury ani tury.
+### Nicki i kolor meczu
+
+- Każdy gracz podaje niepusty nick w menu głównym; jest on zapamiętywany lokalnie.
+- Nick po przycięciu spacji i zamianie na małe litery jest haszowany SHA-256, a pierwsze trzy bajty hasha wyznaczają stały, nasycony kolor HSV gracza.
+- W online nicki są synchronizowane razem z ustawieniem i kartą; host jest białymi, gość czarnymi. W lokalnym prototypie oba kolory używają nicku jednego gracza.
+- Tło meczu jest płynną mieszanką obu kolorów. Udziały są dokładnie proporcjonalne do aktualnej wartości figur na planszy (P=1, S/G=2, W=4, H/K=6); przy 0:0 używa mieszanki 50:50. Karty, pola i kaczka nie wpływają na tę wartość.
+
+**Granica:** niezależnie od wybranego stylu, grafika nigdy nie może ukrywać pola, legalnego ruchu, stanu figury ani tury.
 
 ---
 
@@ -122,7 +113,10 @@ To są zasady zaimplementowane obecnie; nie są jeszcze pełną, ostateczną spe
 - Każdy kolor ma 2 dodatkowe pola do dołożenia. Wejście w tryb dokładania pola: `Spacja`.
 - Dołożenie pola nie kończy tury; ruch figury kończy turę.
 - Zaimplementowano ruchy: pion, skoczek, goniec, wieża, hetman, król.
-- Jest bicie, wykrywanie szacha, mata i pata.
+- Figury można przesuwać zarówno kliknięciem, jak i przeciąganiem; w kreatorze można też przeciągać już ustawione figury.
+- Jest bicie, wykrywanie szacha, mata i pata. Walidacja ruchu odbywa się na kopii stanu planszy, bez chwilowego przesuwania widoku figury.
+- Kolor z więcej niż jednym królem może tracić króle jak zwykłe figury; standardowa ochrona szachem zaczyna działać natychmiast po pozostawieniu mu jednego króla.
+- Przy pojedynczym szachu w pozycji startowej ruch dostaje szachowany kolor. Jeżeli oba pojedyncze króle są szachowane, host losuje pozycje wszystkich figur na planszy 6×6 do czasu uzyskania pozycji bez szacha.
 - Pion promuje się automatycznie do hetmana.
 - Nie ma jeszcze roszady, bicia w przelocie, ruchu pionem o dwa pola ani mechaniki pasowania.
 
@@ -175,7 +169,7 @@ Gra na jednym komputerze. Działa jako główne środowisko testowania zasad.
 
 ### Online
 
-Pokój dla 2 osób. Host gra białymi, dołączający czarnymi. Obecna implementacja używa UDP, próbuje P2P i ma awaryjny relay przez VPS.
+Pokój dla 2 osób. Host gra białymi, dołączający czarnymi. Po zsynchronizowaniu ustawień host losuje wynik, a obie strony oglądają pełnoekranową animację rzutu monetą 3D; orzeł daje pierwszy ruch białym, reszka czarnym, z wyjątkiem startowego szacha. Implementacja używa UDP, próbuje P2P i ma awaryjny relay przez VPS.
 
 ### Kampania / tryb fabularny
 
@@ -188,17 +182,19 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 ### Gotowe lub częściowo gotowe
 
 - Projekt Godot 4.7 w trybie renderowania Mobile.
-- Menu, intro wideo i audio.
+- Menu, intro wideo i audio oraz wymagany, zapamiętywany nick gracza.
 - Kreator neutralnego ustawienia figur z budżetem punktowym.
+- Wybór jednej karty na gracza, pięć pierwszych efektów i synchronizacja kart online.
 - Lokalna rozgrywka na 6×6 z możliwością poszerzania do 8×8.
-- Podstawowa walidacja ruchów, szach/mat/pat i promocja.
-- HUD liczby pozostałych pól.
-- Lobby online i synchronizacja ruchów/dodawanych pól.
+- Walidacja ruchów, szach/mat/pat, promocja oraz obsługa wielu króli.
+- HUD liczby pozostałych pól i nicków obu stron.
+- Animowane tło meczu, barwione dynamicznie mieszanką kolorów wygenerowanych z nicków i aktualnego materiału.
+- Lobby online, synchronizacja ruchów/dodawanych pól, początkowego układu i rzutu monety.
 - Własny protokół UDP z potwierdzeniami i retransmisją.
+- Zamykanie pokoju po meczu: klient hosta wysyła `GAME_CLOSE`, a serwer usuwa pokój i powiadamia gościa.
 
 ### Niezaimplementowane
 
-- System kart.
 - Kampania, fabuła, bossowie, progresja i odblokowania.
 - Doprecyzowany balans armii, kart oraz planszy.
 - Produkcyjny hosting i konfiguracja sieci.
@@ -225,13 +221,15 @@ Repozytorium zawiera znaczące lokalne, niezatwierdzone zmiany w aktualnej wersj
 
 | Komponent | Odpowiedzialność |
 | --- | --- |
-| `main.gd` | Stan meczu, ruchy, walidacja, tury, szach/mat/pat, rozszerzanie planszy, akcje sieciowe. |
+| `main.gd` | Stan meczu, ruchy, walidacja, tury, szach/mat/pat, rozszerzanie planszy, akcje sieciowe i dynamiczna barwa tła zależna od materiału. |
+| `game_rules.gd` | Czysty silnik zasad: generowanie ruchów, ataki, szach, wielokrólewskość, mata/pat i losowanie bezpiecznej pozycji startowej. |
 | `ustawianie.gd` | Kreator armii, budżet punktów, drag-and-drop, zapis neutralnego układu. |
-| `network_manager.gd` | Pokoje online, P2P hole punching, relay, niezawodne przesyłanie akcji. |
+| `network_manager.gd` | Pokoje online, P2P hole punching, relay, niezawodne przesyłanie akcji oraz synchronizacja nicków. |
 | `lobby.gd` | Interfejs tworzenia i dołączania do pokoju. |
-| `pozycja_osobista.gd` | Autoload przechowujący układ przygotowany przez gracza. |
+| `pozycja_osobista.gd` | Autoload przechowujący układ, kartę, profil nicku i deterministyczny kolor gracza. |
 | `figura.gd` | Prezentacja figury, hitbox, typ, kolor i promocja. |
 | `hud.gd` | Liczniki dodatkowych pól i wizualizacja aktualnej tury. |
+| `rzut_moneta.gd`, `control.gd` | Zsynchronizowana, pełnoekranowa prezentacja rzutu monety 3D oraz przywracanie globalnych ustawień czasu/fizyki. |
 
 Autoloady zdefiniowane w `project.godot`:
 
@@ -332,5 +330,4 @@ Poniższe pytania wymagają decyzji zespołu przed większą implementacją:
 - Czy dołożenie pola jest zasobem na całą grę, na turę, czy może być modyfikowane kartami?
 - Jak daleko wolno odejść od klasycznych szachów, aby gra nadal była intuicyjna?
 - Czy kampania ma być całkowicie ukryta, czy odkrywana przez sekretne warunki w menu/meczach?
-- Jaki jest docelowy tytuł: „Mini Chess”, „Zryj Chess”, czy nazwa związana z infekcją/systemem?
-
+- Jaki jest docelowy tytuł: „Mini Chess”, „Zryj Chess”, czy inna nazwa (zależna od jeszcze nieustalonego klimatu gry)?
