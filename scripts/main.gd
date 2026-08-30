@@ -395,7 +395,9 @@ func koniec_tury() -> void:
 	kolor_posuniecia = GameRules.other_color(kolor_posuniecia)
 
 func moze_promowac(figura) -> bool:
-	return figura.typ == "P" and ((figura.kolor == "b" and pozycja(figura).y == 1) or (figura.kolor == "c" and pozycja(figura).y == 6))
+	if figura.typ != "P" or dostepne_pola.is_empty():
+		return false
+	return pozycja(figura).y == GameRules.edge_row(dostepne_pola, figura.kolor)
 
 func koniec_gry(kolor_wygranej := "", from_network := false) -> void:
 	if game_finished:

@@ -153,15 +153,19 @@ static func initial_board() -> Array[Vector2i]:
 			board.append(Vector2i(x, y))
 	return board
 
-static func reached_opposite_edge(pieces: Array, board: Array[Vector2i], color: String) -> bool:
-	if board.is_empty():
-		return false
+static func edge_row(board: Array[Vector2i], color: String) -> int:
 	var target_y := board[0].y
 	for square in board:
 		if color == WHITE:
 			target_y = min(target_y, square.y)
 		else:
 			target_y = max(target_y, square.y)
+	return target_y
+
+static func reached_opposite_edge(pieces: Array, board: Array[Vector2i], color: String) -> bool:
+	if board.is_empty():
+		return false
+	var target_y := edge_row(board, color)
 	for piece in pieces:
 		if str(piece["color"]) == color and str(piece["type"]) == "K" and int(piece["y"]) == target_y:
 			return true
