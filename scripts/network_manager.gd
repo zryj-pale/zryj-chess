@@ -10,8 +10,8 @@ const MAX_RETRIES := 8
 
 signal peer_found
 signal transport_ready(mode: String)
-signal remote_ready(pieces: Array)
-signal game_started(white_pieces: Array, black_pieces: Array, coin: String, turn: String)
+signal remote_ready(pieces: Array, card: String, nickname: String)
+signal game_started(white_pieces: Array, black_pieces: Array, coin: String, turn: String, white_card: String, black_card: String, white_nickname: String, black_nickname: String)
 signal action_received(action: Dictionary)
 signal player_disconnected(reason: String)
 signal connection_error(reason: String)
@@ -36,6 +36,10 @@ var white_pieces: Array = []
 var black_pieces: Array = []
 var coin_result := "orzel"
 var initial_turn := "b"
+var white_card := ""
+var black_card := ""
+var white_nickname := ""
+var black_nickname := ""
 
 func _ready() -> void:
 	randomize()
@@ -83,6 +87,10 @@ func reset() -> void:
 	black_pieces.clear()
 	coin_result = "orzel"
 	initial_turn = "b"
+	white_card = ""
+	black_card = ""
+	white_nickname = ""
+	black_nickname = ""
 
 func _process(_delta: float) -> void:
 	if not is_online:
@@ -170,11 +178,14 @@ func _confirm_direct() -> void:
 		transport_mode = "direct"
 		transport_ready.emit(transport_mode)
 
-func send_ready(pieces: Array) -> void:
-	_send_reliable({"type": "ready", "pieces": pieces})
+func send_ready(pieces: Array, card: String, nickname: String) -> void:
+	_send_reliable({"type": "ready", "pieces": pieces, "card": card if CardRegistry.is_valid(card) else "", "nickname": nickname.strip_edges()})
 
-func start_game(host_white: Array, guest_black: Array) -> void:
+func start_game(host_white: Array, guest_black: Array, host_card: String, guest_card: String, host_nickname: String, guest_nickname: String) -> void:
 	if not is_host:
+		return
+	if host_nickname.strip_edges().is_empty() or guest_nickname.strip_edges().is_empty():
+		connection_error.emit("Obaj gracze muszą podać nick.")
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
@@ -183,8 +194,12 @@ func start_game(host_white: Array, guest_black: Array) -> void:
 	black_pieces = resolved["black"]
 	coin_result = "orzel" if rng.randf() < 0.5 else "reszka"
 	initial_turn = GameRules.starting_turn(white_pieces, black_pieces, coin_result)
-	_send_reliable({"type": "start", "white": white_pieces, "black": black_pieces, "coin": coin_result, "turn": initial_turn})
-	game_started.emit(white_pieces, black_pieces, coin_result, initial_turn)
+	white_card = host_card if CardRegistry.is_valid(host_card) else ""
+	black_card = guest_card if CardRegistry.is_valid(guest_card) else ""
+	white_nickname = host_nickname.strip_edges()
+	black_nickname = guest_nickname.strip_edges()
+	_send_reliable({"type": "start", "white": white_pieces, "black": black_pieces, "coin": coin_result, "turn": initial_turn, "white_card": white_card, "black_card": black_card, "white_nickname": white_nickname, "black_nickname": black_nickname})
+	game_started.emit(white_pieces, black_pieces, coin_result, initial_turn, white_card, black_card, white_nickname, black_nickname)
 
 func submit_action(action: Dictionary) -> void:
 	_send_reliable({"type": "action", "action": action})
@@ -199,14 +214,21 @@ func _receive_payload(payload: Dictionary) -> void:
 	match payload.get("type", ""):
 		"ready":
 			if payload.get("pieces", []) is Array:
-				remote_ready.emit(payload["pieces"])
+				remote_ready.emit(payload["pieces"], str(payload.get("card", "")), str(payload.get("nickname", "")).strip_edges())
 		"start":
 			if payload.get("white", []) is Array and payload.get("black", []) is Array:
 				white_pieces = payload["white"]
 				black_pieces = payload["black"]
 				coin_result = str(payload.get("coin", "orzel"))
 				initial_turn = str(payload.get("turn", "b"))
-				game_started.emit(white_pieces, black_pieces, coin_result, initial_turn)
+				white_card = str(payload.get("white_card", ""))
+				black_card = str(payload.get("black_card", ""))
+				white_nickname = str(payload.get("white_nickname", "")).strip_edges()
+				black_nickname = str(payload.get("black_nickname", "")).strip_edges()
+				if white_nickname.is_empty() or black_nickname.is_empty():
+					connection_error.emit("Nieprawidłowe nicki graczy.")
+					return
+				game_started.emit(white_pieces, black_pieces, coin_result, initial_turn, white_card, black_card, white_nickname, black_nickname)
 		"action":
 			if payload.get("action", {}) is Dictionary:
 				action_received.emit(payload["action"])

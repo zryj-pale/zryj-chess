@@ -23,6 +23,9 @@ func _on_join_pressed() -> void:
 	_begin(false)
 
 func _begin(host: bool) -> void:
+	if not PozycjaOsobista.has_nickname():
+		status_label.text = "Wróć do menu głównego i wpisz nick."
+		return
 	var code := room_code.text.strip_edges()
 	if code.length() < 4:
 		status_label.text = "Wpisz kod pokoju o długości co najmniej 4 znaków."
@@ -41,13 +44,16 @@ func _on_peer_found() -> void:
 
 func _on_transport_ready(mode: String) -> void:
 	status_label.text = "Połączenie: " + ("bezpośrednie P2P." if mode == "direct" else "przez VPS (relay).") + "\nSynchronizowanie ustawień…"
-	NetworkManager.send_ready(_own_pieces())
+	NetworkManager.send_ready(_own_pieces(), PozycjaOsobista.wybrana_karta, PozycjaOsobista.nickname)
 
-func _on_remote_ready(pieces: Array) -> void:
+func _on_remote_ready(pieces: Array, card: String, nickname: String) -> void:
 	if NetworkManager.is_host:
-		NetworkManager.start_game(_own_pieces(), pieces)
+		if nickname.is_empty():
+			status_label.text = "Drugi gracz nie podał nicku."
+			return
+		NetworkManager.start_game(_own_pieces(), pieces, PozycjaOsobista.wybrana_karta, card, PozycjaOsobista.nickname, nickname)
 
-func _on_game_started(_white_pieces: Array, _black_pieces: Array, _coin: String, _turn: String) -> void:
+func _on_game_started(_white_pieces: Array, _black_pieces: Array, _coin: String, _turn: String, _white_card: String, _black_card: String, _white_nickname: String, _black_nickname: String) -> void:
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
 func _own_pieces() -> Array:
