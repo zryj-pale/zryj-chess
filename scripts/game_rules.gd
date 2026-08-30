@@ -17,7 +17,7 @@ static func king_count(pieces: Array, color: String) -> int:
 			count += 1
 	return count
 
-static func is_in_check(pieces: Array, board: Array[Vector2i], color: String) -> bool:
+static func is_in_check(pieces: Array, board: Array[Vector2i], color: String, cards: Dictionary = {}, duck: Vector2i = Vector2i(-99, -99)) -> bool:
 	# Additional kings are normal capturable units. Only the final king is checked.
 	if king_count(pieces, color) != 1:
 		return false
@@ -27,33 +27,35 @@ static func is_in_check(pieces: Array, board: Array[Vector2i], color: String) ->
 			king_pos = _position(piece)
 			break
 	for piece in pieces:
-		if str(piece["color"]) != color and king_pos in attack_squares(pieces, board, piece):
+		if str(piece["color"]) != color and king_pos in attack_squares(pieces, board, piece, cards, duck):
 			return true
 	return false
 
-static func legal_moves(pieces: Array, board: Array[Vector2i], index: int) -> Array[Vector2i]:
+static func legal_moves(pieces: Array, board: Array[Vector2i], index: int, cards: Dictionary = {}, duck: Vector2i = Vector2i(-99, -99)) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	if index < 0 or index >= pieces.size():
 		return result
-	for target in pseudo_moves(pieces, board, index):
-		if is_legal_move(pieces, board, index, target):
+	for target in pseudo_moves(pieces, board, index, cards, duck):
+		if is_legal_move(pieces, board, index, target, cards, duck):
 			result.append(target)
 	return result
 
-static func has_legal_move(pieces: Array, board: Array[Vector2i], color: String) -> bool:
+static func has_legal_move(pieces: Array, board: Array[Vector2i], color: String, cards: Dictionary = {}, duck: Vector2i = Vector2i(-99, -99)) -> bool:
 	for index in range(pieces.size()):
-		if str(pieces[index]["color"]) == color and not legal_moves(pieces, board, index).is_empty():
+		if str(pieces[index]["color"]) == color and not legal_moves(pieces, board, index, cards, duck).is_empty():
 			return true
 	return false
 
-static func is_legal_move(pieces: Array, board: Array[Vector2i], index: int, target: Vector2i) -> bool:
-	if index < 0 or index >= pieces.size() or not target in pseudo_moves(pieces, board, index):
+static func is_legal_move(pieces: Array, board: Array[Vector2i], index: int, target: Vector2i, cards: Dictionary = {}, duck: Vector2i = Vector2i(-99, -99)) -> bool:
+	if index < 0 or index >= pieces.size() or not target in pseudo_moves(pieces, board, index, cards, duck):
 		return false
 	var moving: Dictionary = pieces[index]
 	var occupant_index := piece_index_at(pieces, target)
 	if occupant_index != -1:
 		var occupant: Dictionary = pieces[occupant_index]
 		if str(occupant["color"]) == str(moving["color"]):
+			return false
+		if str(occupant["type"]) == "P" and CardRegistry.any_has(cards, "indestructible_pawns"):
 			return false
 		# The last king is never captured; additional kings are ordinary pieces.
 		if str(occupant["type"]) == "K" and king_count(pieces, str(occupant["color"])) <= 1:
@@ -65,45 +67,49 @@ static func is_legal_move(pieces: Array, board: Array[Vector2i], index: int, tar
 			index -= 1
 	simulated[index]["x"] = target.x
 	simulated[index]["y"] = target.y
-	return not is_in_check(simulated, board, str(moving["color"]))
+	return not is_in_check(simulated, board, str(moving["color"]), cards, duck)
 
-static func pseudo_moves(pieces: Array, board: Array[Vector2i], index: int) -> Array[Vector2i]:
+static func pseudo_moves(pieces: Array, board: Array[Vector2i], index: int, cards: Dictionary = {}, duck: Vector2i = Vector2i(-99, -99)) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	if index < 0 or index >= pieces.size():
 		return result
 	var piece: Dictionary = pieces[index]
 	var start := _position(piece)
 	var color := str(piece["color"])
+	if str(piece["type"]) == "P" and CardRegistry.any_has(cards, "indestructible_pawns"):
+		return result
 	match str(piece["type"]):
-		"S": result.append_array(_step_moves(pieces, board, start, color, KNIGHT))
+		"S": result.append_array(_step_moves(pieces, board, start, color, KNIGHT, duck))
 		"K":
-			result.append_array(_step_moves(pieces, board, start, color, STRAIGHT))
-			result.append_array(_step_moves(pieces, board, start, color, DIAGONAL))
-		"G": result.append_array(_line_moves(pieces, board, start, color, DIAGONAL))
-		"W": result.append_array(_line_moves(pieces, board, start, color, STRAIGHT))
+			result.append_array(_step_moves(pieces, board, start, color, STRAIGHT, duck))
+			result.append_array(_step_moves(pieces, board, start, color, DIAGONAL, duck))
+		"G": result.append_array(_line_moves(pieces, board, start, color, DIAGONAL, duck))
+		"W": result.append_array(_line_moves(pieces, board, start, color, STRAIGHT, duck))
 		"H":
-			result.append_array(_line_moves(pieces, board, start, color, STRAIGHT))
-			result.append_array(_line_moves(pieces, board, start, color, DIAGONAL))
+			result.append_array(_line_moves(pieces, board, start, color, STRAIGHT, duck))
+			result.append_array(_line_moves(pieces, board, start, color, DIAGONAL, duck))
 		"P":
 			var direction := -1 if color == WHITE else 1
 			var forward := start + Vector2i(0, direction)
-			if forward in board and piece_index_at(pieces, forward) == -1:
+			if forward in board and piece_index_at(pieces, forward) == -1 and forward != duck:
 				result.append(forward)
 			for dx in [-1, 1]:
 				var capture := start + Vector2i(dx, direction)
 				var target_index := piece_index_at(pieces, capture)
-				if capture in board and target_index != -1 and str(pieces[target_index]["color"]) != color:
+				if capture in board and target_index != -1 and str(pieces[target_index]["color"]) != color and not (str(pieces[target_index]["type"]) == "P" and CardRegistry.any_has(cards, "indestructible_pawns")):
 					result.append(capture)
 	return result
 
-static func attack_squares(pieces: Array, board: Array[Vector2i], piece: Dictionary) -> Array[Vector2i]:
+static func attack_squares(pieces: Array, board: Array[Vector2i], piece: Dictionary, cards: Dictionary = {}, duck: Vector2i = Vector2i(-99, -99)) -> Array[Vector2i]:
+	if str(piece["type"]) == "P" and CardRegistry.any_has(cards, "indestructible_pawns"):
+		return []
 	if str(piece["type"]) != "P":
-		return pseudo_moves(pieces, board, pieces.find(piece))
+		return pseudo_moves(pieces, board, pieces.find(piece), cards, duck)
 	var result: Array[Vector2i] = []
 	var direction := -1 if str(piece["color"]) == WHITE else 1
 	for dx in [-1, 1]:
 		var target := _position(piece) + Vector2i(dx, direction)
-		if target in board:
+		if target in board and target != duck:
 			result.append(target)
 	return result
 
@@ -147,6 +153,32 @@ static func initial_board() -> Array[Vector2i]:
 			board.append(Vector2i(x, y))
 	return board
 
+static func reached_opposite_edge(pieces: Array, board: Array[Vector2i], color: String) -> bool:
+	if board.is_empty():
+		return false
+	var target_y := board[0].y
+	for square in board:
+		if color == WHITE:
+			target_y = min(target_y, square.y)
+		else:
+			target_y = max(target_y, square.y)
+	for piece in pieces:
+		if str(piece["color"]) == color and str(piece["type"]) == "K" and int(piece["y"]) == target_y:
+			return true
+	return false
+
+static func stalemate_winner(cards: Dictionary, stalemated_color: String) -> String:
+	var other := other_color(stalemated_color)
+	var stalled_has := CardRegistry.has(cards, stalemated_color, "pat_win")
+	var other_has := CardRegistry.has(cards, other, "pat_win")
+	if stalled_has and other_has:
+		return stalemated_color
+	if other_has:
+		return other
+	if stalled_has:
+		return stalemated_color
+	return ""
+
 static func _shuffle_positions(pieces: Array, board: Array[Vector2i], rng: RandomNumberGenerator) -> void:
 	var positions: Array[Vector2i] = board.duplicate()
 	for index in range(positions.size() - 1, 0, -1):
@@ -168,20 +200,22 @@ static func _wire_pieces(pieces: Array, color: String) -> Array:
 static func _position(piece: Dictionary) -> Vector2i:
 	return Vector2i(int(piece["x"]), int(piece["y"]))
 
-static func _step_moves(pieces: Array, board: Array[Vector2i], start: Vector2i, color: String, directions: Array) -> Array[Vector2i]:
+static func _step_moves(pieces: Array, board: Array[Vector2i], start: Vector2i, color: String, directions: Array, duck: Vector2i) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	for direction in directions:
 		var target: Vector2i = start + direction
 		var occupant := piece_index_at(pieces, target)
-		if target in board and (occupant == -1 or str(pieces[occupant]["color"]) != color):
+		if target in board and target != duck and (occupant == -1 or str(pieces[occupant]["color"]) != color):
 			result.append(target)
 	return result
 
-static func _line_moves(pieces: Array, board: Array[Vector2i], start: Vector2i, color: String, directions: Array) -> Array[Vector2i]:
+static func _line_moves(pieces: Array, board: Array[Vector2i], start: Vector2i, color: String, directions: Array, duck: Vector2i) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	for direction in directions:
 		var target: Vector2i = start + direction
 		while target in board:
+			if target == duck:
+				break
 			var occupant := piece_index_at(pieces, target)
 			if occupant != -1:
 				if str(pieces[occupant]["color"]) != color:
