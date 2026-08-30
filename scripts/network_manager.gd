@@ -187,6 +187,11 @@ func start_game(host_white: Array, guest_black: Array, host_card: String, guest_
 	if host_nickname.strip_edges().is_empty() or guest_nickname.strip_edges().is_empty():
 		connection_error.emit("Obaj gracze muszą podać nick.")
 		return
+	var sanitized_host_card := host_card if CardRegistry.is_valid(host_card) else ""
+	var sanitized_guest_card := guest_card if CardRegistry.is_valid(guest_card) else ""
+	if not CardRegistry.is_compatible(sanitized_host_card, sanitized_guest_card):
+		connection_error.emit("Wybrane karty nie mogą być użyte razem w tym meczu.")
+		return
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	var resolved := GameRules.resolve_start_position(host_white, guest_black, rng)
@@ -194,8 +199,8 @@ func start_game(host_white: Array, guest_black: Array, host_card: String, guest_
 	black_pieces = resolved["black"]
 	coin_result = "orzel" if rng.randf() < 0.5 else "reszka"
 	initial_turn = GameRules.starting_turn(white_pieces, black_pieces, coin_result)
-	white_card = host_card if CardRegistry.is_valid(host_card) else ""
-	black_card = guest_card if CardRegistry.is_valid(guest_card) else ""
+	white_card = sanitized_host_card
+	black_card = sanitized_guest_card
 	white_nickname = host_nickname.strip_edges()
 	black_nickname = guest_nickname.strip_edges()
 	_send_reliable({"type": "start", "white": white_pieces, "black": black_pieces, "coin": coin_result, "turn": initial_turn, "white_card": white_card, "black_card": black_card, "white_nickname": white_nickname, "black_nickname": black_nickname})

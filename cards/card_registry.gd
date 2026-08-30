@@ -32,3 +32,17 @@ static func has(cards: Dictionary, color: String, id: String) -> bool:
 
 static func any_has(cards: Dictionary, id: String) -> bool:
 	return has(cards, "b", id) or has(cards, "c", id)
+
+# Card id pairs that must never both be active in the same match. Each entry
+# is a 2-element Array of ids; order does not matter. Empty for now — none of
+# the current cards conflict, but a match can be rejected before it starts by
+# listing a pair here without touching any rules/UI/network call sites.
+const INCOMPATIBLE_PAIRS: Array = []
+
+static func is_compatible(white_id: String, black_id: String) -> bool:
+	if white_id.is_empty() or black_id.is_empty() or white_id == black_id:
+		return true
+	for pair in INCOMPATIBLE_PAIRS:
+		if (pair[0] == white_id and pair[1] == black_id) or (pair[0] == black_id and pair[1] == white_id):
+			return false
+	return true

@@ -55,7 +55,7 @@ static func is_legal_move(pieces: Array, board: Array[Vector2i], index: int, tar
 		var occupant: Dictionary = pieces[occupant_index]
 		if str(occupant["color"]) == str(moving["color"]):
 			return false
-		if str(occupant["type"]) == "P" and CardRegistry.any_has(cards, "indestructible_pawns"):
+		if CardHooks.is_piece_neutralized(cards, occupant):
 			return false
 		# The last king is never captured; additional kings are ordinary pieces.
 		if str(occupant["type"]) == "K" and king_count(pieces, str(occupant["color"])) <= 1:
@@ -76,32 +76,32 @@ static func pseudo_moves(pieces: Array, board: Array[Vector2i], index: int, card
 	var piece: Dictionary = pieces[index]
 	var start := _position(piece)
 	var color := str(piece["color"])
-	if str(piece["type"]) == "P" and CardRegistry.any_has(cards, "indestructible_pawns"):
+	if CardHooks.is_piece_neutralized(cards, piece):
 		return result
 	match str(piece["type"]):
-		"S": result.append_array(_step_moves(pieces, board, start, color, KNIGHT, duck))
+		"S": result.append_array(_step_moves(pieces, board, start, color, KNIGHT, cards, duck))
 		"K":
-			result.append_array(_step_moves(pieces, board, start, color, STRAIGHT, duck))
-			result.append_array(_step_moves(pieces, board, start, color, DIAGONAL, duck))
-		"G": result.append_array(_line_moves(pieces, board, start, color, DIAGONAL, duck))
-		"W": result.append_array(_line_moves(pieces, board, start, color, STRAIGHT, duck))
+			result.append_array(_step_moves(pieces, board, start, color, STRAIGHT, cards, duck))
+			result.append_array(_step_moves(pieces, board, start, color, DIAGONAL, cards, duck))
+		"G": result.append_array(_line_moves(pieces, board, start, color, DIAGONAL, cards, duck))
+		"W": result.append_array(_line_moves(pieces, board, start, color, STRAIGHT, cards, duck))
 		"H":
-			result.append_array(_line_moves(pieces, board, start, color, STRAIGHT, duck))
-			result.append_array(_line_moves(pieces, board, start, color, DIAGONAL, duck))
+			result.append_array(_line_moves(pieces, board, start, color, STRAIGHT, cards, duck))
+			result.append_array(_line_moves(pieces, board, start, color, DIAGONAL, cards, duck))
 		"P":
 			var direction := -1 if color == WHITE else 1
 			var forward := start + Vector2i(0, direction)
-			if forward in board and piece_index_at(pieces, forward) == -1 and forward != duck:
+			if forward in board and piece_index_at(pieces, forward) == -1 and not CardHooks.is_square_blocked(cards, forward, duck):
 				result.append(forward)
 			for dx in [-1, 1]:
 				var capture := start + Vector2i(dx, direction)
 				var target_index := piece_index_at(pieces, capture)
-				if capture in board and target_index != -1 and str(pieces[target_index]["color"]) != color and not (str(pieces[target_index]["type"]) == "P" and CardRegistry.any_has(cards, "indestructible_pawns")):
+				if capture in board and target_index != -1 and str(pieces[target_index]["color"]) != color and not CardHooks.is_piece_neutralized(cards, pieces[target_index]):
 					result.append(capture)
 	return result
 
 static func attack_squares(pieces: Array, board: Array[Vector2i], piece: Dictionary, cards: Dictionary = {}, duck: Vector2i = Vector2i(-99, -99)) -> Array[Vector2i]:
-	if str(piece["type"]) == "P" and CardRegistry.any_has(cards, "indestructible_pawns"):
+	if CardHooks.is_piece_neutralized(cards, piece):
 		return []
 	if str(piece["type"]) != "P":
 		return pseudo_moves(pieces, board, pieces.find(piece), cards, duck)
@@ -109,7 +109,7 @@ static func attack_squares(pieces: Array, board: Array[Vector2i], piece: Diction
 	var direction := -1 if str(piece["color"]) == WHITE else 1
 	for dx in [-1, 1]:
 		var target := _position(piece) + Vector2i(dx, direction)
-		if target in board and target != duck:
+		if target in board and not CardHooks.is_square_blocked(cards, target, duck):
 			result.append(target)
 	return result
 
@@ -171,18 +171,6 @@ static func reached_opposite_edge(pieces: Array, board: Array[Vector2i], color: 
 			return true
 	return false
 
-static func stalemate_winner(cards: Dictionary, stalemated_color: String) -> String:
-	var other := other_color(stalemated_color)
-	var stalled_has := CardRegistry.has(cards, stalemated_color, "pat_win")
-	var other_has := CardRegistry.has(cards, other, "pat_win")
-	if stalled_has and other_has:
-		return stalemated_color
-	if other_has:
-		return other
-	if stalled_has:
-		return stalemated_color
-	return ""
-
 static func _shuffle_positions(pieces: Array, board: Array[Vector2i], rng: RandomNumberGenerator) -> void:
 	var positions: Array[Vector2i] = board.duplicate()
 	for index in range(positions.size() - 1, 0, -1):
@@ -204,21 +192,21 @@ static func _wire_pieces(pieces: Array, color: String) -> Array:
 static func _position(piece: Dictionary) -> Vector2i:
 	return Vector2i(int(piece["x"]), int(piece["y"]))
 
-static func _step_moves(pieces: Array, board: Array[Vector2i], start: Vector2i, color: String, directions: Array, duck: Vector2i) -> Array[Vector2i]:
+static func _step_moves(pieces: Array, board: Array[Vector2i], start: Vector2i, color: String, directions: Array, cards: Dictionary, duck: Vector2i) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	for direction in directions:
 		var target: Vector2i = start + direction
 		var occupant := piece_index_at(pieces, target)
-		if target in board and target != duck and (occupant == -1 or str(pieces[occupant]["color"]) != color):
+		if target in board and not CardHooks.is_square_blocked(cards, target, duck) and (occupant == -1 or str(pieces[occupant]["color"]) != color):
 			result.append(target)
 	return result
 
-static func _line_moves(pieces: Array, board: Array[Vector2i], start: Vector2i, color: String, directions: Array, duck: Vector2i) -> Array[Vector2i]:
+static func _line_moves(pieces: Array, board: Array[Vector2i], start: Vector2i, color: String, directions: Array, cards: Dictionary, duck: Vector2i) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
 	for direction in directions:
 		var target: Vector2i = start + direction
 		while target in board:
-			if target == duck:
+			if CardHooks.is_square_blocked(cards, target, duck):
 				break
 			var occupant := piece_index_at(pieces, target)
 			if occupant != -1:

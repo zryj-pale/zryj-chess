@@ -240,10 +240,11 @@ func _apply_move(figura, cel: Vector2i) -> void:
 	_refresh_background_tint()
 	$dzwiek/ruch.play()
 	var mover := kolor_posuniecia
-	if CardRegistry.has(active_cards, mover, "racing_kings") and GameRules.reached_opposite_edge(_rules_pieces(), dostepne_pola, mover):
-		koniec_gry(mover)
+	var winner := CardHooks.win_condition_winner(active_cards, _rules_pieces(), dostepne_pola, mover)
+	if not winner.is_empty():
+		koniec_gry(winner)
 		return
-	if CardRegistry.any_has(active_cards, "duck_chess"):
+	if CardHooks.needs_extra_step_after_move(active_cards):
 		duck_pending = true
 		stan = Stany.DUCK
 		return
@@ -252,18 +253,21 @@ func _apply_move(figura, cel: Vector2i) -> void:
 func _finish_after_move(mover: String) -> void:
 	duck_pending = false
 	stan = Stany.IDLE
-	if CardRegistry.has(active_cards, mover, "check_adds_tile") and GameRules.king_count(_rules_pieces(), GameRules.other_color(mover)) == 1 and czy_szach(GameRules.other_color(mover)):
-		if mover == "b":
-			bialy_tiles += 1
-		else:
-			czarny_tiles += 1
+	var move_effects := CardHooks.after_move(active_cards, mover, {
+		"pieces": _rules_pieces(),
+		"board": dostepne_pola,
+		"duck_position": duck_position,
+	})
+	match str(move_effects["grant_tile_to"]):
+		"b": bialy_tiles += 1
+		"c": czarny_tiles += 1
 	koniec_tury()
 	if czy_szach(kolor_posuniecia):
 		$dzwiek/szach.play()
 		if not GameRules.has_legal_move(_rules_pieces(), dostepne_pola, kolor_posuniecia, active_cards, duck_position):
 			koniec_gry(GameRules.other_color(kolor_posuniecia))
 	elif not GameRules.has_legal_move(_rules_pieces(), dostepne_pola, kolor_posuniecia, active_cards, duck_position):
-		koniec_gry(GameRules.stalemate_winner(active_cards, kolor_posuniecia))
+		koniec_gry(CardHooks.stalemate_winner(active_cards, kolor_posuniecia))
 
 func _apply_tile(pole: Vector2i) -> void:
 	dodaj_pole(pole)
