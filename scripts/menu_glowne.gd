@@ -47,6 +47,7 @@ func _on_robcza_pressed() -> void:
 func _on_video_stream_player_finished() -> void:
 	await get_tree().create_timer(1).timeout
 	$VideoStreamPlayer.visible = false
+	$IntroBackdrop.visible = false
 
 
 func _on_ustawianie_pressed() -> void:
