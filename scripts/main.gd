@@ -37,11 +37,16 @@ var match_background = null
 var player_nicknames := {"b": "", "c": ""}
 var player_colors := {"b": Color.WHITE, "c": Color.WHITE}
 var board_flipped := false
+var white_loadout_choice := 0
+var black_loadout_choice := 0
 
 func _ready() -> void:
 	add_to_group("game_main")
 	_add_menu_background()
 	generacja_pol(6)
+	_create_duck_marker()
+	_create_promotion_picker()
+	$"dzwiek/muzyka w tle".play()
 	if NetworkManager.is_online:
 		my_color = "b" if NetworkManager.is_host else "c"
 		# White already renders with its home rows at the bottom by default;
@@ -54,17 +59,11 @@ func _ready() -> void:
 		NetworkManager.action_received.connect(_on_network_action)
 		NetworkManager.player_disconnected.connect(_on_player_disconnected)
 		ustawienie_z_pozycji(NetworkManager.white_pieces, NetworkManager.black_pieces)
+		_refresh_player_colors()
+		_refresh_background_tint()
 		start_online_match()
 	else:
-		active_cards = {"b": PozycjaOsobista.wybrana_karta, "c": PozycjaOsobista.wybrana_karta}
-		player_nicknames = {"b": PozycjaOsobista.nickname, "c": PozycjaOsobista.nickname}
-		ustawienie_z_pozycji([], [])
-		start_local_match()
-	$"dzwiek/muzyka w tle".play()
-	_create_duck_marker()
-	_create_promotion_picker()
-	_refresh_player_colors()
-	_refresh_background_tint()
+		_show_loadout_picker()
 
 func _add_menu_background() -> void:
 	match_background = MAIN_MENU_BACKGROUND.instantiate()
@@ -97,15 +96,86 @@ func _material_points(color: String) -> int:
 	return total
 
 func ustawienie_z_pozycji(white: Array, black: Array) -> void:
-	if NetworkManager.is_online:
-		for piece in white:
-			dodaj(str(piece[0]), "b", Vector2i(int(piece[1]), int(piece[2])))
-		for piece in black:
-			dodaj(str(piece[0]), "c", Vector2i(int(piece[1]), int(piece[2])))
-		return
-	for piece in PozycjaOsobista.ustawienie:
+	for piece in white:
+		dodaj(str(piece[0]), "b", Vector2i(int(piece[1]), int(piece[2])))
+	for piece in black:
+		dodaj(str(piece[0]), "c", Vector2i(int(piece[1]), int(piece[2])))
+
+# Local versus lets white and black each pick which of the two saved
+# loadouts (army + card) they play with, before the coin toss. Online skips
+# this entirely and always uses loadouts[0] (see lobby.gd), since there's
+# only one of you connecting - nothing to choose between.
+func _show_loadout_picker() -> void:
+	white_loadout_choice = 0
+	black_loadout_choice = 0
+	var picker := PanelContainer.new()
+	picker.anchor_left = 0.5
+	picker.anchor_right = 0.5
+	picker.anchor_top = 0.5
+	picker.anchor_bottom = 0.5
+	picker.offset_left = -170.0
+	picker.offset_right = 170.0
+	picker.offset_top = -95.0
+	picker.offset_bottom = 95.0
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	picker.add_child(vbox)
+	var title := Label.new()
+	title.text = "Wybierzcie loadouty przed rzutem monetą"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(title)
+	var white_buttons: Array[Button] = []
+	var black_buttons: Array[Button] = []
+	vbox.add_child(_build_loadout_row("Białe:", white_buttons, 0))
+	vbox.add_child(_build_loadout_row("Czarne:", black_buttons, 1))
+	var start_button := Button.new()
+	start_button.text = "Rozpocznij mecz"
+	start_button.pressed.connect(func():
+		picker.queue_free()
+		_begin_local_match(white_loadout_choice, black_loadout_choice)
+	)
+	vbox.add_child(start_button)
+	add_child(picker)
+
+func _build_loadout_row(label_text: String, buttons_out: Array[Button], which: int) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 6)
+	var label := Label.new()
+	label.text = label_text
+	label.custom_minimum_size = Vector2(50, 0)
+	row.add_child(label)
+	for i in range(PozycjaOsobista.loadouts.size()):
+		var button := Button.new()
+		button.text = "Loadout %d" % (i + 1)
+		button.toggle_mode = true
+		button.button_pressed = i == 0
+		button.pressed.connect(_on_loadout_choice_pressed.bind(which, i, buttons_out))
+		row.add_child(button)
+		buttons_out.append(button)
+	return row
+
+func _on_loadout_choice_pressed(which: int, index: int, buttons: Array[Button]) -> void:
+	if which == 0:
+		white_loadout_choice = index
+	else:
+		black_loadout_choice = index
+	for i in range(buttons.size()):
+		buttons[i].button_pressed = i == index
+
+func _begin_local_match(white_index: int, black_index: int) -> void:
+	var white_loadout: Dictionary = PozycjaOsobista.loadouts[white_index]
+	var black_loadout: Dictionary = PozycjaOsobista.loadouts[black_index]
+	active_cards = {"b": str(white_loadout.get("karta", "")), "c": str(black_loadout.get("karta", ""))}
+	player_nicknames = {"b": PozycjaOsobista.nickname, "c": PozycjaOsobista.nickname}
+	for piece in white_loadout.get("ustawienie", []):
 		dodaj(str(piece[0]), "b", piece[1])
+	for piece in black_loadout.get("ustawienie", []):
 		dodaj(str(piece[0]), "c", Vector2i(piece[1].x, 7 - piece[1].y))
+	_refresh_player_colors()
+	_refresh_background_tint()
+	start_local_match()
 
 func start_local_match() -> void:
 	var coin_result := "orzel" if randf() < 0.5 else "reszka"

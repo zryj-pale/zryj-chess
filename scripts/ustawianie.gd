@@ -4,6 +4,7 @@ extends Node2D
 @onready var progress_bar: ProgressBar = $ProgressBar
 @onready var punkty_label: Label = $PunktyLabel
 @onready var cards_toggle: Button = $CardsToggle
+@onready var loadout_buttons: Array[Button] = [$Loadout1Button, $Loadout2Button]
 
 const MAX_PUNKTY := 16
 const SZARY_KOLOR := Color(0.55, 0.55, 0.55, 1.0)
@@ -22,6 +23,23 @@ func _ready() -> void:
 	generacja_pol(1, 4, 6, 6)
 	synchronizacja()
 	cards_toggle.pressed.connect(_on_cards_toggle_pressed)
+	for i in range(loadout_buttons.size()):
+		loadout_buttons[i].pressed.connect(_on_loadout_slot_pressed.bind(i))
+	_refresh_loadout_buttons()
+
+func _on_loadout_slot_pressed(index: int) -> void:
+	if index == PozycjaOsobista.editing_loadout_index:
+		_refresh_loadout_buttons()
+		return
+	PozycjaOsobista.save_loadouts()
+	PozycjaOsobista.editing_loadout_index = index
+	_cancel_drag()
+	synchronizacja()
+	_refresh_loadout_buttons()
+
+func _refresh_loadout_buttons() -> void:
+	for i in range(loadout_buttons.size()):
+		loadout_buttons[i].button_pressed = i == PozycjaOsobista.editing_loadout_index
 
 func _process(_delta: float) -> void:
 	if dragging:
@@ -193,11 +211,13 @@ func _on_reset_pressed() -> void:
 	_cancel_drag()
 	reset()
 	PozycjaOsobista.ustawienie.clear()
+	PozycjaOsobista.save_loadouts()
 
 func _on_menu_pressed() -> void:
 	if not ma_krola():
 		$dzwiek/zakaz.play()
 		return
+	PozycjaOsobista.save_loadouts()
 	get_tree().change_scene_to_file("res://scenes/menu glowne.tscn")
 
 func _on_cards_toggle_pressed() -> void:

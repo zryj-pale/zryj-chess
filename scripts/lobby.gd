@@ -52,24 +52,30 @@ func _maybe_send_ready() -> void:
 	if not role_known or transport_mode.is_empty():
 		return
 	status_label.text = "Połączenie: " + ("bezpośrednie P2P." if transport_mode == "direct" else "przez VPS (relay).") + "\nSynchronizowanie ustawień…"
-	NetworkManager.send_ready(_own_pieces(), PozycjaOsobista.wybrana_karta, PozycjaOsobista.nickname)
+	NetworkManager.send_ready(_own_pieces(), _own_card(), PozycjaOsobista.nickname)
 
 func _on_remote_ready(pieces: Array, card: String, nickname: String) -> void:
 	if NetworkManager.is_host:
 		if nickname.is_empty():
 			status_label.text = "Drugi gracz nie podał nicku."
 			return
-		NetworkManager.start_game(_own_pieces(), pieces, PozycjaOsobista.wybrana_karta, card, PozycjaOsobista.nickname, nickname)
+		NetworkManager.start_game(_own_pieces(), pieces, _own_card(), card, PozycjaOsobista.nickname, nickname)
 
 func _on_game_started(_white_pieces: Array, _black_pieces: Array, _coin: String, _turn: String, _white_card: String, _black_card: String, _white_nickname: String, _black_nickname: String) -> void:
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
+# Online always plays with the first saved loadout - there's only one of
+# you connecting, so there's nothing to choose between (unlike local versus,
+# where both loadouts are on the same screen and each side picks one).
 func _own_pieces() -> Array:
 	var result: Array = []
-	for piece in PozycjaOsobista.ustawienie:
+	for piece in PozycjaOsobista.loadouts[0]["ustawienie"]:
 		var y: int = int(piece[1].y) if NetworkManager.is_host else 7 - int(piece[1].y)
 		result.append([piece[0], piece[1].x, y])
 	return result
+
+func _own_card() -> String:
+	return str(PozycjaOsobista.loadouts[0]["karta"])
 
 func _on_connection_error(reason: String) -> void:
 	status_label.text = "Błąd połączenia: " + reason
