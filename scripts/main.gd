@@ -9,6 +9,7 @@ const MAIN_MENU_BACKGROUND = preload("res://scenes/tlo_ekranu_glownego.tscn")
 const MATERIAL_VALUES := {"P": 1, "S": 2, "G": 2, "W": 4, "H": 6, "K": 6}
 const PROMOTION_CHOICES := ["H", "W", "G", "S"]
 const PROMOTION_LABELS := {"H": "Hetman", "W": "Wieża", "G": "Goniec", "S": "Skoczek"}
+const BOARD_MAX := 7 # matches pole_w_granicach()'s 0..7 range
 
 var stan := Stany.IDLE
 var figury: Array = []
@@ -35,6 +36,7 @@ var promotion_picker: Control
 var match_background = null
 var player_nicknames := {"b": "", "c": ""}
 var player_colors := {"b": Color.WHITE, "c": Color.WHITE}
+var board_flipped := false
 
 func _ready() -> void:
 	add_to_group("game_main")
@@ -42,6 +44,11 @@ func _ready() -> void:
 	generacja_pol(6)
 	if NetworkManager.is_online:
 		my_color = "b" if NetworkManager.is_host else "c"
+		# White already renders with its home rows at the bottom by default;
+		# only the guest (black) needs its own view mirrored so its own side
+		# is always at the bottom of ITS screen. Local play (my_color == "")
+		# is shared by both players on one screen, so it never flips.
+		board_flipped = my_color == "c"
 		active_cards = {"b": NetworkManager.white_card, "c": NetworkManager.black_card}
 		player_nicknames = {"b": NetworkManager.white_nickname, "c": NetworkManager.black_nickname}
 		NetworkManager.action_received.connect(_on_network_action)
@@ -132,7 +139,7 @@ func _on_coin_finished() -> void:
 func _process(_delta: float) -> void:
 	if game_finished or not input_enabled:
 		return
-	var pole := plansza.local_to_map(get_global_mouse_position())
+	var pole := _view(plansza.local_to_map(get_global_mouse_position()))
 	var pressed := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 	match stan:
 		Stany.IDLE: stan_idle(pole, pressed)
@@ -169,7 +176,7 @@ func stan_grab(pole: Vector2i, pressed: bool) -> void:
 		chwycona.global_position = get_global_mouse_position()
 		return
 	# Restore before taking a rules snapshot; dragged pixels must never affect chess logic.
-	chwycona.global_position = plansza.map_to_local(poczatkowe_pole)
+	chwycona.global_position = plansza.map_to_local(_view(poczatkowe_pole))
 	chwycona.top_level = false
 	if pole == poczatkowe_pole:
 		wybrana = chwycona
@@ -240,7 +247,7 @@ func _apply_move(figura, cel: Vector2i) -> void:
 	var captured = stoi_figura(cel)
 	if captured:
 		zbicie(captured)
-	figura.global_position = plansza.map_to_local(cel)
+	figura.global_position = plansza.map_to_local(_view(cel))
 	var mover := kolor_posuniecia
 	if moze_promowac(figura):
 		_begin_promotion(figura, mover)
@@ -387,7 +394,17 @@ func stoi_figura(pole: Vector2i):
 	return null
 
 func pozycja(figura) -> Vector2i:
-	return plansza.local_to_map(figura.global_position)
+	return _view(plansza.local_to_map(figura.global_position))
+
+# Mirrors a logical board coordinate to/from where it's actually drawn on
+# this client's screen. Board-side logic, network messages and dostepne_pola
+# always stay in logical space; only TileMapLayer cell addressing and mouse
+# hit-testing go through this. Applying the same 180-degree mirror twice is
+# the identity, so one function serves both directions.
+func _view(pole: Vector2i) -> Vector2i:
+	if not board_flipped:
+		return pole
+	return Vector2i(BOARD_MAX - pole.x, BOARD_MAX - pole.y)
 
 func dodaj(typ: String, kolor: String, pole: Vector2i) -> void:
 	if not pole_na_planszy(pole) or stoi_figura(pole):
@@ -397,7 +414,7 @@ func dodaj(typ: String, kolor: String, pole: Vector2i) -> void:
 	figura.kolor = kolor
 	add_child(figura)
 	figury.append(figura)
-	figura.global_position = plansza.map_to_local(pole)
+	figura.global_position = plansza.map_to_local(_view(pole))
 
 func zbicie(figura) -> void:
 	figury.erase(figura)
@@ -418,7 +435,7 @@ func pole_na_planszy(pole: Vector2i) -> bool:
 func dodaj_pole(pole: Vector2i) -> void:
 	if not pole_w_granicach(pole) or pole_na_planszy(pole):
 		return
-	plansza.set_cell(pole, 0, pole)
+	plansza.set_cell(_view(pole), 0, _view(pole))
 	dostepne_pola.append(pole)
 
 func _create_duck_marker() -> void:
@@ -457,7 +474,7 @@ func _can_place_duck(pole: Vector2i) -> bool:
 
 func _apply_duck(pole: Vector2i) -> void:
 	duck_position = pole
-	duck_marker.position = plansza.map_to_local(pole)
+	duck_marker.position = plansza.map_to_local(_view(pole))
 	$dzwiek/ruch.play()
 
 func koniec_tury() -> void:
