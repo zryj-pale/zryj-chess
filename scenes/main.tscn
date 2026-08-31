@@ -85,13 +85,14 @@ sources/0 = SubResource("TileSetAtlasSource_hntit")
 
 [node name="Node2D" type="Node2D" unique_id=494308546]
 script = ExtResource("1_o6xl0")
-dodawanie_pol = null
 
-[node name="TileMapLayer" type="TileMapLayer" parent="." unique_id=271423402]
+[node name="BoardRoot" type="Node2D" parent="."]
+
+[node name="TileMapLayer" type="TileMapLayer" parent="BoardRoot" unique_id=271423402]
 tile_map_data = PackedByteArray("AAABAAEAAAABAAEAAAACAAIAAAABAAEAAAADAAEAAAABAAEAAAAEAAIAAAABAAEAAAAFAAEAAAABAAEAAAAGAAIAAAABAAEAAAABAAMAAAABAAEAAAADAAMAAAABAAEAAAAFAAMAAAABAAEAAAACAAQAAAABAAEAAAAEAAQAAAABAAEAAAAGAAQAAAABAAEAAAABAAUAAAABAAEAAAADAAUAAAABAAEAAAAFAAUAAAABAAEAAAACAAYAAAABAAEAAAAEAAYAAAABAAEAAAAGAAYAAAABAAEAAAACAAEAAAABAAAAAAAEAAEAAAABAAAAAAAGAAEAAAABAAAAAAAGAAMAAAABAAAAAAAFAAIAAAABAAAAAAADAAIAAAABAAAAAAABAAIAAAABAAAAAAABAAQAAAABAAAAAAACAAMAAAABAAAAAAAEAAMAAAABAAAAAAAFAAQAAAABAAAAAAADAAQAAAABAAAAAAACAAUAAAABAAAAAAAEAAUAAAABAAAAAAAGAAUAAAABAAAAAAAFAAYAAAABAAAAAAADAAYAAAABAAAAAAABAAYAAAABAAAAAAA=")
 tile_set = SubResource("TileSet_vla5v")
 
-[node name="Board" type="Sprite2D" parent="." unique_id=504994467]
+[node name="Board" type="Sprite2D" parent="BoardRoot" unique_id=504994467]
 visible = false
 texture_filter = 1
 texture = SubResource("CompressedTexture2D_cfnrg")
@@ -102,6 +103,7 @@ centered = false
 [node name="muzyka w tle" type="AudioStreamPlayer" parent="dzwiek" unique_id=1029661334]
 stream = ExtResource("3_o6xl0")
 pitch_scale = 0.8
+bus = &"Music"
 
 [node name="zbicie" type="AudioStreamPlayer" parent="dzwiek" unique_id=1571709894]
 stream = ExtResource("4_choun")
