@@ -40,6 +40,12 @@ text = "Kolekcja kart"
 layout_mode = 2
 text = "Wstecz"
 
+[node name="NoCardButton" type="Button" parent="Margin/VBox"]
+layout_mode = 2
+size_flags_horizontal = 4
+toggle_mode = true
+text = "Brak karty"
+
 [node name="GridCenter" type="CenterContainer" parent="Margin/VBox"]
 layout_mode = 2
 size_flags_vertical = 3

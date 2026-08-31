@@ -13,6 +13,7 @@ const CARD_SIZE := Vector2(108, 144) # 3:4 aspect ratio
 @onready var prev_button: Button = $Margin/VBox/Footer/PrevButton
 @onready var next_button: Button = $Margin/VBox/Footer/NextButton
 @onready var back_button: Button = $Margin/VBox/Header/BackButton
+@onready var no_card_button: Button = $Margin/VBox/NoCardButton
 
 var current_page := 0
 var card_buttons: Dictionary = {}
@@ -22,7 +23,12 @@ func _ready() -> void:
 	back_button.pressed.connect(_on_back_pressed)
 	prev_button.pressed.connect(_on_prev_pressed)
 	next_button.pressed.connect(_on_next_pressed)
+	no_card_button.pressed.connect(_on_no_card_pressed)
 	_render_page()
+
+func _on_no_card_pressed() -> void:
+	PozycjaOsobista.wybrana_karta = ""
+	_refresh_selection()
 
 func _total_pages() -> int:
 	var count := CardRegistry.all_ids().size()
@@ -71,6 +77,7 @@ func _on_card_pressed(id: String) -> void:
 	_refresh_selection()
 
 func _refresh_selection() -> void:
+	no_card_button.button_pressed = PozycjaOsobista.wybrana_karta.is_empty()
 	for id in card_buttons:
 		var button: Button = card_buttons[id]
 		button.button_pressed = PozycjaOsobista.wybrana_karta == id
