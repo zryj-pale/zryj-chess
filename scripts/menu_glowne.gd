@@ -55,6 +55,11 @@ func _on_nickname_label_input(event: InputEvent) -> void:
 func _on_robcza_pressed() -> void:
 	if not _save_nickname():
 		return
+	if not PozycjaOsobista.any_loadout_has_king():
+		# No playable army yet in either slot - send them to set one up
+		# instead of starting a match that can't work.
+		get_tree().change_scene_to_file("res://scenes/ustawianie.tscn")
+		return
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
 
@@ -72,6 +77,10 @@ func _on_ustawianie_pressed() -> void:
 
 func _on_online_pressed() -> void:
 	if not _save_nickname():
+		return
+	if not PozycjaOsobista.loadout_has_king(0):
+		# Online always plays with loadout 1 specifically (see lobby.gd).
+		get_tree().change_scene_to_file("res://scenes/ustawianie.tscn")
 		return
 	get_tree().change_scene_to_file("res://scenes/lobby.tscn")
 

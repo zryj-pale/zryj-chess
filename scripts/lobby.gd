@@ -22,6 +22,9 @@ func _on_play_pressed() -> void:
 	if not PozycjaOsobista.has_nickname():
 		status_label.text = "Wróć do menu głównego i wpisz nick."
 		return
+	if not PozycjaOsobista.loadout_has_king(0):
+		status_label.text = "Ustaw najpierw armię z królem w Loadout 1 (online zawsze go używa)."
+		return
 	var code := room_code.text.strip_edges()
 	if code.length() < 4:
 		status_label.text = "Wpisz kod pokoju o długości co najmniej 4 znaków."

@@ -106,8 +106,11 @@ func ustawienie_z_pozycji(white: Array, black: Array) -> void:
 # this entirely and always uses loadouts[0] (see lobby.gd), since there's
 # only one of you connecting - nothing to choose between.
 func _show_loadout_picker() -> void:
-	white_loadout_choice = 0
-	black_loadout_choice = 0
+	# menu_glowne.gd already refuses to reach local play unless at least one
+	# loadout has a king, so this is never -1 in practice.
+	var default_index := 0 if PozycjaOsobista.loadout_has_king(0) else 1
+	white_loadout_choice = default_index
+	black_loadout_choice = default_index
 	var picker := PanelContainer.new()
 	picker.anchor_left = 0.5
 	picker.anchor_right = 0.5
@@ -146,11 +149,15 @@ func _build_loadout_row(label_text: String, buttons_out: Array[Button], which: i
 	label.text = label_text
 	label.custom_minimum_size = Vector2(50, 0)
 	row.add_child(label)
+	var current_choice := white_loadout_choice if which == 0 else black_loadout_choice
 	for i in range(PozycjaOsobista.loadouts.size()):
 		var button := Button.new()
 		button.text = "Loadout %d" % (i + 1)
 		button.toggle_mode = true
-		button.button_pressed = i == 0
+		button.button_pressed = i == current_choice
+		# A loadout without a king can't field a playable side, so it can't
+		# be picked for either color.
+		button.disabled = not PozycjaOsobista.loadout_has_king(i)
 		button.pressed.connect(_on_loadout_choice_pressed.bind(which, i, buttons_out))
 		row.add_child(button)
 		buttons_out.append(button)

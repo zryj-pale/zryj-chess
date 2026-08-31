@@ -168,12 +168,6 @@ func can_place(typ: String) -> bool:
 	$dzwiek/zakaz.play()
 	return false
 
-func ma_krola() -> bool:
-	for ustawienie in PozycjaOsobista.ustawienie:
-		if ustawienie[0] == "K":
-			return true
-	return false
-
 func najechana_figura():
 	for figura in figury:
 		if figura.mysz:
@@ -204,8 +198,19 @@ func reset() -> void:
 
 func synchronizacja() -> void:
 	reset()
+	# Defensively re-validate on every load/slot-switch: a piece outside
+	# dostepne_pola (or stacked on another piece) would otherwise render
+	# with no board tile under it - "floating" - and still count toward the
+	# point budget. Drop those and persist the cleanup so it sticks.
+	var valid: Array = []
 	for ustawienie in PozycjaOsobista.ustawienie:
-		dodaj(ustawienie[0], ustawienie[1])
+		if ustawienie is Array and ustawienie.size() == 2 and typeof(ustawienie[1]) == TYPE_VECTOR2I \
+				and pole_na_planszy(ustawienie[1]) and stoi_figura(ustawienie[1]) == null:
+			dodaj(ustawienie[0], ustawienie[1])
+			valid.append(ustawienie)
+	if valid.size() != PozycjaOsobista.ustawienie.size():
+		PozycjaOsobista.ustawienie = valid
+		PozycjaOsobista.save_loadouts()
 
 func _on_reset_pressed() -> void:
 	_cancel_drag()
@@ -214,9 +219,6 @@ func _on_reset_pressed() -> void:
 	PozycjaOsobista.save_loadouts()
 
 func _on_menu_pressed() -> void:
-	if not ma_krola():
-		$dzwiek/zakaz.play()
-		return
 	PozycjaOsobista.save_loadouts()
 	get_tree().change_scene_to_file("res://scenes/menu glowne.tscn")
 

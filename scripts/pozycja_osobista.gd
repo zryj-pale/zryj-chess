@@ -40,6 +40,24 @@ func _ensure_loadouts() -> void:
 	while loadouts.size() < LOADOUT_COUNT:
 		loadouts.append({"ustawienie": [], "karta": ""})
 
+# A match needs a king to be playable at all. Checked at the point a match
+# actually starts (menu_glowne.gd for local, lobby.gd for online), not when
+# just leaving the setup screen - you can always go back to the main menu
+# with an incomplete or empty army.
+func loadout_has_king(index: int) -> bool:
+	if index < 0 or index >= loadouts.size():
+		return false
+	for piece in loadouts[index]["ustawienie"]:
+		if piece is Array and piece.size() >= 1 and str(piece[0]) == "K":
+			return true
+	return false
+
+func any_loadout_has_king() -> bool:
+	for i in range(loadouts.size()):
+		if loadout_has_king(i):
+			return true
+	return false
+
 # Piece placement mutates the ustawienie array returned by the getter above
 # in place (append/clear/remove_at), which never goes through a property
 # setter, so screens that edit a loadout call this explicitly when they're
