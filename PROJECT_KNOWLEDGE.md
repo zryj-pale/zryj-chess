@@ -74,6 +74,7 @@ Stałe elementy wizualne, niezależne od finalnego stylu:
 - Nick po przycięciu spacji i zamianie na małe litery jest haszowany SHA-256, a pierwsze trzy bajty hasha wyznaczają stały, nasycony kolor HSV gracza.
 - W online nicki są synchronizowane razem z ustawieniem i kartą; host jest białymi, gość czarnymi. W lokalnym prototypie oba kolory używają nicku jednego gracza.
 - Tło meczu jest płynną mieszanką obu kolorów. Udziały są dokładnie proporcjonalne do aktualnej wartości figur na planszy (P=1, S/G=2, W=4, H/K=6); przy 0:0 używa mieszanki 50:50. Karty, pola i kaczka nie wpływają na tę wartość.
+- Tło menu głównego używa tego samego mechanizmu z jednym kolorem — barwą wygenerowaną z własnego nicku gracza, odświeżaną na żywo przy zapisie nicku.
 
 **Granica:** niezależnie od wybranego stylu, grafika nigdy nie może ukrywać pola, legalnego ruchu, stanu figury ani tury.
 
@@ -182,17 +183,19 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 ### Gotowe lub częściowo gotowe
 
 - Projekt Godot 4.7 w trybie renderowania Mobile.
-- Menu, intro wideo i audio oraz wymagany, zapamiętywany nick gracza.
+- Menu, intro wideo i audio oraz wymagany, zapamiętywany nick gracza; pole nicku w prawym górnym rogu menu, chowane po zapisaniu.
+- Pełny ekran bez rozciągania interfejsu: `window/stretch/mode=canvas_items` + `aspect=expand` — przyciski, HUD i plansza mają natywny rozmiar, tylko animowane tło (`tlo_ekranu_glownego.gd`) samo skaluje się do rozmiaru okna. Intro wideo zostaje w oryginalnym, wyśrodkowanym kwadracie 512×512 z czarnym tłem widocznym tylko podczas jego odtwarzania.
 - Kreator neutralnego ustawienia figur z budżetem punktowym.
-- Wybór jednej karty na gracza, pięć pierwszych efektów i synchronizacja kart online.
+- Kolekcja kart jako osobny, paginowany ekran (`scenes/karty.tscn`, 16 kart/strona w siatce 4×4, kafelki w proporcji 3:4, jawny przycisk „Brak karty”) zamiast panelu wewnątrz kreatora armii. Wybór jednej karty na gracza, pięć pierwszych efektów i synchronizacja kart online.
 - Lokalna rozgrywka na 6×6 z możliwością poszerzania do 8×8.
-- Walidacja ruchów, szach/mat/pat, promocja oraz obsługa wielu króli.
-- HUD liczby pozostałych pól i nicków obu stron.
+- Walidacja ruchów, szach/mat/pat, promocja (dynamicznie wykrywa skrajny wiersz aktualnej planszy, działa też po rozszerzeniu do 8×8) oraz obsługa wielu króli.
+- HUD liczby pozostałych pól i nicków obu stron w formacie „Białe (nick): N”.
 - Animowane tło meczu, barwione dynamicznie mieszanką kolorów wygenerowanych z nicków i aktualnego materiału.
 - Lobby online, synchronizacja ruchów/dodawanych pól, początkowego układu i rzutu monety.
 - Własny protokół UDP z potwierdzeniami i retransmisją.
 - Zamykanie pokoju po meczu: klient hosta wysyła `GAME_CLOSE`, a serwer usuwa pokój i powiadamia gościa.
 - Efekty kart zaczepione przez generyczne hooki (`cards/card_hooks.gd`) zamiast sprawdzania konkretnych ID w `game_rules.gd`/`main.gd`, plus walidacja niekompatybilnych par kart przed startem meczu.
+- Serwer VPS wdrożony jako usługa systemd (`zryj-chess.service`, dedykowany użytkownik `chessserver`, `Restart=always`), odporna na błędnie sformatowane pakiety (w tym historyczny przypadek `GAME_PING` bez drugiego dwukropka) — zweryfikowane testem end-to-end protokołu z zewnętrznej sieci.
 - Testy jednostkowe silnika zasad w `tests/`, uruchamiane headlessowo bez otwierania edytora:
   `godot --headless --path . --script res://tests/run_tests.gd` (kod wyjścia = liczba nieudanych asercji).
 
@@ -200,12 +203,8 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 
 - Kampania, fabuła, bossowie, progresja i odblokowania.
 - Doprecyzowany balans armii, kart oraz planszy.
-- Produkcyjny hosting i konfiguracja sieci.
-- Testy automatyczne i pełna walidacja jakości.
-
-### Ważny stan Git
-
-Repozytorium zawiera znaczące lokalne, niezatwierdzone zmiany w aktualnej wersji multiplayera i gry. Przed większą pracą należy je przejrzeć, przetestować i zapisać w logicznych commitach. Dokumenty w `docs/compose/plans/` są historycznymi planami i ich checklisty nie odzwierciedlają aktualnego stanu kodu.
+- Pełny mecz online między dwoma fizycznie różnymi sieciami, powtarzalny kilka razy z rzędu (wymaga dwóch osób/urządzeń — zaplanowane, jeszcze nieprzeprowadzone).
+- CI uruchamiający testy automatycznie przy każdym commicie.
 
 ---
 
@@ -225,14 +224,19 @@ Repozytorium zawiera znaczące lokalne, niezatwierdzone zmiany w aktualnej wersj
 | Komponent | Odpowiedzialność |
 | --- | --- |
 | `main.gd` | Stan meczu, ruchy, walidacja, tury, szach/mat/pat, rozszerzanie planszy, akcje sieciowe i dynamiczna barwa tła zależna od materiału. |
-| `game_rules.gd` | Czysty silnik zasad: generowanie ruchów, ataki, szach, wielokrólewskość, mata/pat i losowanie bezpiecznej pozycji startowej. |
-| `ustawianie.gd` | Kreator armii, budżet punktów, drag-and-drop, zapis neutralnego układu. |
-| `network_manager.gd` | Pokoje online, P2P hole punching, relay, niezawodne przesyłanie akcji oraz synchronizacja nicków. |
+| `game_rules.gd` | Czysty silnik zasad: generowanie ruchów, ataki, szach, wielokrólewskość, mata/pat, dynamiczna promocja i losowanie bezpiecznej pozycji startowej. Pyta `CardHooks` ogólnie o efekty kart, nie zna konkretnych ID. |
+| `cards/card_registry.gd` | Dane kart: id, nazwa, opis, deklarowane hooki oraz walidacja niekompatybilnych par (`is_compatible`). |
+| `cards/card_hooks.gd` | Jedyne miejsce mapujące hooki (moves/capture/attacks/blocked_squares/win_condition/after_move/stalemate) na konkretne ID kart; `game_rules.gd` i `main.gd` wołają je generycznie. |
+| `ustawianie.gd` | Kreator armii, budżet punktów, drag-and-drop, zapis neutralnego układu; przycisk otwierający kolekcję kart. |
+| `karty.gd` | Paginowany ekran kolekcji kart (16/stronę, siatka 4×4, kafelki 3:4) z jawną opcją braku karty. |
+| `network_manager.gd` | Pokoje online, P2P hole punching, relay, niezawodne przesyłanie akcji, synchronizacja nicków oraz walidacja kompatybilności kart przed startem meczu. |
 | `lobby.gd` | Interfejs tworzenia i dołączania do pokoju. |
 | `pozycja_osobista.gd` | Autoload przechowujący układ, kartę, profil nicku i deterministyczny kolor gracza. |
 | `figura.gd` | Prezentacja figury, hitbox, typ, kolor i promocja. |
 | `hud.gd` | Liczniki dodatkowych pól i wizualizacja aktualnej tury. |
 | `rzut_moneta.gd`, `control.gd` | Zsynchronizowana, pełnoekranowa prezentacja rzutu monety 3D oraz przywracanie globalnych ustawień czasu/fizyki. |
+| `tlo_ekranu_glownego.gd` | Animowane tło menu/meczu; samo skaluje się do rzeczywistego rozmiaru okna i przyjmuje barwę od `main.gd`/`menu_glowne.gd`. |
+| `tests/*.gd` | Headlessowy zestaw testów jednostkowych silnika zasad (`tests/run_tests.gd` jako punkt wejścia). |
 
 Autoloady zdefiniowane w `project.godot`:
 
@@ -247,8 +251,10 @@ Autoloady zdefiniowane w `project.godot`:
 zryj-chess-main/
 ├── project.godot                 # Konfiguracja Godot i autoloady
 ├── PROJECT_KNOWLEDGE.md          # Ten dokument
-├── scenes/                       # Sceny Godot: menu, gra, lobby, HUD, figury itd.
+├── scenes/                       # Sceny Godot: menu, gra, lobby, HUD, figury, kolekcja kart itd.
 ├── scripts/                      # Logika GDScript
+├── cards/                        # Dane kart (card_registry.gd) i generyczne hooki (card_hooks.gd)
+├── tests/                        # Headlessowy zestaw testów jednostkowych silnika zasad
 ├── assets/                       # Tekstury, modele, intro i grafiki menu
 ├── audio/                        # Muzyka i efekty dźwiękowe
 └── docs/compose/plans/           # Historyczne plany implementacji
@@ -275,17 +281,17 @@ Host i gość rejestrują kod pokoju na VPS
 Aktualne ustawienia w `scripts/network_manager.gd`:
 
 - port VPS: `51820`;
-- adres VPS: `31.70.109.158` (tymczasowy — działa tylko lokalnie);
+- adres VPS: `31.70.109.158`;
 - timeout P2P: 4 sekundy;
 - heartbeat: 10 sekund.
 
-Aby udostępnić online prawdziwym graczom:
+Stan wdrożenia:
 
-1. uruchomić `server.py` na VPS;
-2. otworzyć UDP port `51820` w firewallu/VPS;
-3. wpisać publiczne IP lub domenę VPS w `VPS_HOST`;
-4. przetestować grę na dwóch różnych łączach internetowych;
-5. przygotować obsługę błędów, logi i instrukcję wdrożenia.
+1. ✅ `server.py` działa na VPS jako usługa systemd (`zryj-chess.service`, użytkownik `chessserver`, `Restart=always`), niezależna od otwartego terminala.
+2. ✅ Port UDP `51820` jest otwarty i potwierdzony jako osiągalny z zewnątrz (test protokołu end-to-end spoza VPS).
+3. ✅ `VPS_HOST`/`VPS_PORT` w `network_manager.gd` wskazują na aktualny adres/port.
+4. ✅ Serwer ma obsługę błędów wokół każdego pakietu — pojedynczy błędnie sformatowany pakiet (np. `GAME_PING` bez drugiego dwukropka) nie ubija już procesu.
+5. ❌ **Wciąż do zrobienia:** pełny mecz między dwoma fizycznie różnymi sieciami (np. dwa różne Wi-Fi albo Wi-Fi + LTE), powtarzalny kilka razy z rzędu bez pomocy dewelopera.
 
 ---
 
@@ -293,32 +299,28 @@ Aby udostępnić online prawdziwym graczom:
 
 ### Logika gry
 
-- Promocja pionka używa wierszy `1` i `6`, co może wymagać zmiany po rozszerzeniu planszy do pełnego 8×8.
 - Kreator wymaga króla, ale nie wymusza dokładnie jednego króla ani kompletnej, sensownej armii.
 - Potrzebne są reguły dla nietypowych sytuacji po dołożeniu pola lub z kartami zmieniającymi granice planszy.
 
 ### Sieć i bezpieczeństwo
 
-- `VPS_HOST` jest lokalny i wymaga konfiguracji przed testami zdalnymi.
 - UDP jest nieszyfrowane i nie ma pełnego uwierzytelniania; obecnie nie jest to system do publicznego, wrogiego środowiska.
-- Serwer Python wymaga odporniejszego obsłużenia błędnie sformatowanych pakietów, szczególnie `GAME_PING`.
+- VPS działa pod jednym, prowizorycznym adresem — brak DNS/domeny, brak automatycznego odzyskiwania po awarii samej maszyny (tylko procesu, przez systemd).
 
 ### Proces
 
-- Należy chronić niezatwierdzone zmiany Git i nie nadpisywać ich bez świadomego przeglądu.
-- Brakuje testów automatycznych oraz stałego procesu sprawdzania scen w Godot.
 - Nazewnictwo i kod zawierają pozostałości eksperymentów; przy rozwijaniu systemu kart warto oddzielić silnik zasad od interfejsu i efektów wizualnych.
+- Testy jednostkowe pokrywają silnik zasad (`tests/`), ale nie ma jeszcze testów UI/integracyjnych ani CI uruchamiającego je automatycznie przy każdym commicie.
 
 ---
 
 ## 13. Najbliższe priorytety
 
-1. **Stabilizacja prototypu:** uruchomić grę, sprawdzić wszystkie sceny i rozegrać lokalny mecz od ustawienia po mata.
-2. **Test multiplayera:** skonfigurować VPS i przeprowadzić test na dwóch różnych sieciach.
-3. **Zabezpieczenie stanu:** przejrzeć oraz podzielić obecne zmiany na sensowne commity.
-4. **Projekt systemu kart:** stworzyć model danych karty oraz punkty rozszerzeń w silniku zasad.
-5. **Pierwszy pionowy wycinek docelowej gry:** jedna karta dla figury, jedna karta planszy, jasne UI aktywnych efektów i pełna synchronizacja online.
-6. **Specyfikacja kampanii:** pierwsza lokacja, jeden boss, jedna nagroda-karta i zapis progresu.
+1. **Test multiplayera na różnych sieciach:** VPS jest wdrożony i zweryfikowany technicznie (usługa systemd, odporność na złe pakiety, protokół end-to-end) — brakuje jeszcze powtarzalnego, pełnego meczu między dwoma fizycznie różnymi sieciami.
+2. **Weryfikacja gotowości MVP:** pełny mecz online, od ustawienia armii po mata, bez pomocy dewelopera i bez restartu z powodu błędu sieci, powtarzalny kilka razy z rzędu.
+3. **Rozbudowa kolekcji kart:** kolejne karty dodaje się przez `card_registry.gd`/`card_hooks.gd`; ekran kolekcji (`karty.gd`) już wspiera paginację po 16 kart, więc UI skaluje się bez dodatkowych zmian.
+4. **Doprecyzowanie balansu:** armia, karty i rozmiar planszy.
+5. **Specyfikacja kampanii:** pierwsza lokacja, jeden boss, jedna nagroda-karta i zapis progresu.
 
 ---
 
