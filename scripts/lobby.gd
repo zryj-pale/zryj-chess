@@ -1,28 +1,24 @@
 extends Control
 
 @onready var room_code: LineEdit = $VBoxContainer/RoomCode
-@onready var host_button: Button = $VBoxContainer/HostButton
-@onready var join_button: Button = $VBoxContainer/JoinButton
+@onready var play_button: Button = $VBoxContainer/PlayButton
 @onready var status_label: Label = $StatusLabel
 
+var role_known := false
+var transport_mode := ""
+
 func _ready() -> void:
-	host_button.pressed.connect(_on_host_pressed)
-	join_button.pressed.connect(_on_join_pressed)
+	play_button.pressed.connect(_on_play_pressed)
 	$BackButton.pressed.connect(_on_back_pressed)
 	NetworkManager.peer_found.connect(_on_peer_found)
+	NetworkManager.role_assigned.connect(_on_role_assigned)
 	NetworkManager.transport_ready.connect(_on_transport_ready)
 	NetworkManager.remote_ready.connect(_on_remote_ready)
 	NetworkManager.game_started.connect(_on_game_started)
 	NetworkManager.connection_error.connect(_on_connection_error)
 	NetworkManager.player_disconnected.connect(_on_player_disconnected)
 
-func _on_host_pressed() -> void:
-	_begin(true)
-
-func _on_join_pressed() -> void:
-	_begin(false)
-
-func _begin(host: bool) -> void:
+func _on_play_pressed() -> void:
 	if not PozycjaOsobista.has_nickname():
 		status_label.text = "Wróć do menu głównego i wpisz nick."
 		return
@@ -30,20 +26,32 @@ func _begin(host: bool) -> void:
 	if code.length() < 4:
 		status_label.text = "Wpisz kod pokoju o długości co najmniej 4 znaków."
 		return
-	host_button.disabled = true
-	join_button.disabled = true
+	play_button.disabled = true
 	room_code.editable = false
+	role_known = false
+	transport_mode = ""
 	status_label.text = "Łączenie z pokojem…"
-	if host:
-		NetworkManager.create_room(code)
-	else:
-		NetworkManager.join_room(code)
+	NetworkManager.connect_to_room(code)
 
 func _on_peer_found() -> void:
 	status_label.text = "Gracz znaleziony — próba połączenia bezpośredniego…"
 
+# Whoever joins a room code first becomes the host (białe); the next player
+# to join the same code becomes the guest (czarne) - the server decides,
+# not a button choice.
+func _on_role_assigned(is_host: bool) -> void:
+	role_known = true
+	status_label.text = "Jesteś hostem (białe)." if is_host else "Dołączasz jako czarne."
+	_maybe_send_ready()
+
 func _on_transport_ready(mode: String) -> void:
-	status_label.text = "Połączenie: " + ("bezpośrednie P2P." if mode == "direct" else "przez VPS (relay).") + "\nSynchronizowanie ustawień…"
+	transport_mode = mode
+	_maybe_send_ready()
+
+func _maybe_send_ready() -> void:
+	if not role_known or transport_mode.is_empty():
+		return
+	status_label.text = "Połączenie: " + ("bezpośrednie P2P." if transport_mode == "direct" else "przez VPS (relay).") + "\nSynchronizowanie ustawień…"
 	NetworkManager.send_ready(_own_pieces(), PozycjaOsobista.wybrana_karta, PozycjaOsobista.nickname)
 
 func _on_remote_ready(pieces: Array, card: String, nickname: String) -> void:
@@ -65,8 +73,7 @@ func _own_pieces() -> Array:
 
 func _on_connection_error(reason: String) -> void:
 	status_label.text = "Błąd połączenia: " + reason
-	host_button.disabled = false
-	join_button.disabled = false
+	play_button.disabled = false
 	room_code.editable = true
 
 func _on_player_disconnected(reason: String) -> void:

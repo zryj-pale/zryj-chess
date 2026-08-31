@@ -9,6 +9,7 @@ const RETRY_MS := 800
 const MAX_RETRIES := 8
 
 signal peer_found
+signal role_assigned(is_host: bool)
 signal transport_ready(mode: String)
 signal remote_ready(pieces: Array, card: String, nickname: String)
 signal game_started(white_pieces: Array, black_pieces: Array, coin: String, turn: String, white_card: String, black_card: String, white_nickname: String, black_nickname: String)
@@ -44,19 +45,14 @@ var black_nickname := ""
 func _ready() -> void:
 	randomize()
 
-func create_room(code: String) -> void:
-	_start_room(code, true)
-
-func join_room(code: String) -> void:
-	_start_room(code, false)
-
-func _start_room(code: String, host: bool) -> void:
+func connect_to_room(code: String) -> void:
 	reset()
 	room_code = code.strip_edges()
 	if room_code.length() < 4:
 		connection_error.emit("Kod pokoju musi mieć co najmniej 4 znaki.")
 		return
-	is_host = host
+	# is_host stays unknown until the server assigns a role: whoever joins
+	# a code first becomes the host, the next one becomes the guest.
 	is_online = true
 	player_token = "%x%x" % [Time.get_ticks_usec(), randi()]
 	var err := udp.bind(0)
@@ -64,7 +60,7 @@ func _start_room(code: String, host: bool) -> void:
 		connection_error.emit("Nie udało się otworzyć portu UDP.")
 		reset()
 		return
-	_register()
+	_join()
 
 func reset() -> void:
 	udp.close()
@@ -98,7 +94,7 @@ func _process(_delta: float) -> void:
 	_poll_packets()
 	var now := Time.get_ticks_msec()
 	if peer_token.is_empty() and now - last_register_at >= 1000:
-		_register()
+		_join()
 	if now - last_ping_at >= HEARTBEAT_MS:
 		_send_to_server("GAME_PING:%s:%s" % [room_code, player_token])
 		last_ping_at = now
@@ -110,8 +106,8 @@ func _process(_delta: float) -> void:
 		last_punch_at = now
 	_retry_pending(now)
 
-func _register() -> void:
-	_send_to_server("GAME_REGISTER:%s:%s:%s" % [room_code, player_token, "host" if is_host else "guest"])
+func _join() -> void:
+	_send_to_server("GAME_JOIN:%s:%s" % [room_code, player_token])
 	last_register_at = Time.get_ticks_msec()
 
 func _poll_packets() -> void:
@@ -128,6 +124,12 @@ func _handle_packet(text: String, source_ip: String, source_port: int) -> void:
 		return
 	if text.begins_with("GAME_ERROR:"):
 		connection_error.emit(text.trim_prefix("GAME_ERROR:"))
+		return
+	if text.begins_with("GAME_ROLE:"):
+		var role_parts := text.split(":", false, 2)
+		if role_parts.size() == 3 and role_parts[1] == player_token:
+			is_host = role_parts[2] == "host"
+			role_assigned.emit(is_host)
 		return
 	if text.begins_with("GAME_PEER:"):
 		var peer_parts := text.split(":", false, 3)
