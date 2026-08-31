@@ -18,6 +18,11 @@ var editing_loadout_index := 0
 var nickname := ""
 var music_muted := false
 
+# Transient hand-off to scenes/wynik.tscn - never persisted. main.gd fills
+# these in right before changing to that scene.
+var last_result_message := ""
+var last_result_big_text := ""
+
 var ustawienie: Array:
 	get:
 		return loadouts[editing_loadout_index]["ustawienie"]

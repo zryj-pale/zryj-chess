@@ -1,6 +1,8 @@
 extends Node2D
 
-@onready var plansza: TileMapLayer = $TileMapLayer
+@onready var plansza: TileMapLayer = $BoardRoot/TileMapLayer
+@onready var board_root: Node2D = $BoardRoot
+const TILE_SIZE := 64
 
 enum Stany { IDLE, GRAB, SELECT, PLACEMENT, DUCK, PROMOTION }
 const OKNO = preload("res://scenes/okno_rzutu.tscn")
@@ -44,6 +46,8 @@ func _ready() -> void:
 	add_to_group("game_main")
 	_add_menu_background()
 	generacja_pol(6)
+	_center_board()
+	get_viewport().size_changed.connect(_center_board)
 	_create_duck_marker()
 	_create_promotion_picker()
 	$"dzwiek/muzyka w tle".play()
@@ -64,6 +68,11 @@ func _ready() -> void:
 		start_online_match()
 	else:
 		_show_loadout_picker()
+
+func _center_board() -> void:
+	var board_pixels := Vector2((BOARD_MAX + 1) * TILE_SIZE, (BOARD_MAX + 1) * TILE_SIZE)
+	var viewport_size := get_viewport_rect().size
+	board_root.position = ((viewport_size - board_pixels) / 2.0).round()
 
 func _add_menu_background() -> void:
 	match_background = MAIN_MENU_BACKGROUND.instantiate()
@@ -216,7 +225,7 @@ func _on_coin_finished() -> void:
 func _process(_delta: float) -> void:
 	if game_finished or not input_enabled:
 		return
-	var pole := _view(plansza.local_to_map(get_global_mouse_position()))
+	var pole := _view(plansza.local_to_map(plansza.to_local(get_global_mouse_position())))
 	var pressed := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 	match stan:
 		Stany.IDLE: stan_idle(pole, pressed)
@@ -253,7 +262,9 @@ func stan_grab(pole: Vector2i, pressed: bool) -> void:
 		chwycona.global_position = get_global_mouse_position()
 		return
 	# Restore before taking a rules snapshot; dragged pixels must never affect chess logic.
-	chwycona.global_position = plansza.map_to_local(_view(poczatkowe_pole))
+	# chwycona.top_level is still true here, so position/global_position are
+	# equivalent - this is the board_root-local target either way.
+	chwycona.position = plansza.map_to_local(_view(poczatkowe_pole))
 	chwycona.top_level = false
 	if pole == poczatkowe_pole:
 		wybrana = chwycona
@@ -324,7 +335,7 @@ func _apply_move(figura, cel: Vector2i) -> void:
 	var captured = stoi_figura(cel)
 	if captured:
 		zbicie(captured)
-	figura.global_position = plansza.map_to_local(_view(cel))
+	figura.position = plansza.map_to_local(_view(cel))
 	var mover := kolor_posuniecia
 	if moze_promowac(figura):
 		_begin_promotion(figura, mover)
@@ -471,7 +482,7 @@ func stoi_figura(pole: Vector2i):
 	return null
 
 func pozycja(figura) -> Vector2i:
-	return _view(plansza.local_to_map(figura.global_position))
+	return _view(plansza.local_to_map(figura.position))
 
 # Mirrors a logical board coordinate to/from where it's actually drawn on
 # this client's screen. Board-side logic, network messages and dostepne_pola
@@ -489,9 +500,9 @@ func dodaj(typ: String, kolor: String, pole: Vector2i) -> void:
 	var figura = preload("res://scenes/figura.tscn").instantiate()
 	figura.typ = typ
 	figura.kolor = kolor
-	add_child(figura)
+	board_root.add_child(figura)
 	figury.append(figura)
-	figura.global_position = plansza.map_to_local(_view(pole))
+	figura.position = plansza.map_to_local(_view(pole))
 
 func zbicie(figura) -> void:
 	figury.erase(figura)
@@ -520,7 +531,7 @@ func _create_duck_marker() -> void:
 	duck_marker.texture = DUCK_TEXTURE
 	duck_marker.scale = Vector2(0.28, 0.28)
 	duck_marker.position = Vector2(-999, -999)
-	add_child(duck_marker)
+	board_root.add_child(duck_marker)
 
 func _create_promotion_picker() -> void:
 	promotion_picker = PanelContainer.new()
@@ -573,4 +584,21 @@ func koniec_gry(kolor_wygranej := "", from_network := false) -> void:
 			NetworkManager.close_room()
 		else:
 			NetworkManager.reset()
-	get_tree().change_scene_to_file("res://scenes/menu glowne.tscn")
+	_prepare_result_screen(kolor_wygranej)
+	get_tree().change_scene_to_file("res://scenes/wynik.tscn")
+
+# Placeholder result screen: online shows a big "W FAPS"/"L FAPS" from this
+# viewer's own perspective (win or lose), local versus just names the
+# winner - both players are watching the same screen, so there's no "you"
+# to call out.
+func _prepare_result_screen(kolor_wygranej: String) -> void:
+	if kolor_wygranej.is_empty():
+		PozycjaOsobista.last_result_message = "Remis"
+		PozycjaOsobista.last_result_big_text = ""
+		return
+	var winner_nick := str(player_nicknames.get(kolor_wygranej, ""))
+	PozycjaOsobista.last_result_message = winner_nick + " wygrywa"
+	if NetworkManager.is_online:
+		PozycjaOsobista.last_result_big_text = "W FAPS" if kolor_wygranej == my_color else "L FAPS"
+	else:
+		PozycjaOsobista.last_result_big_text = ""
