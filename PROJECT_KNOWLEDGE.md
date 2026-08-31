@@ -120,7 +120,7 @@ To są zasady zaimplementowane obecnie; nie są jeszcze pełną, ostateczną spe
 - Przy pojedynczym szachu w pozycji startowej ruch dostaje szachowany kolor. Jeżeli oba pojedyncze króle są szachowane, host losuje pozycje wszystkich figur na planszy 6×6 do czasu uzyskania pozycji bez szacha.
 - Promujący się pion daje graczowi wybór figury (hetman/wieża/goniec/skoczek) zamiast automatycznej promocji do hetmana; w online wybór dokonuje wyłącznie posuwający pionem, drugi klient dostaje go jako osobną akcję sieciową.
 - Online każdy gracz zawsze widzi swoją połowę planszy u dołu ekranu (gość ma widok lustrzanie odbity względem hosta); w trybie lokalnym nic się nie odbija, bo obaj grający dzielą jeden ekran.
-- Nie ma jeszcze roszady, bicia w przelocie, ruchu pionem o dwa pola ani mechaniki pasowania.
+- Roszada i ruch pionem o dwa pola istnieją tylko jako karty (sekcja 8) — poza nimi zasady bazowe nie mają jeszcze roszady, bicia w przelocie ani mechaniki pasowania.
 
 W kreatorze figur:
 
@@ -137,12 +137,7 @@ W kreatorze figur:
 
 ## 6. Docelowy system kart
 
-Przed rozgrywką każdy gracz wybiera **2 karty** z kolekcji kilkudziesięciu. Karty modyfikują reguły gry, figury lub planszę.
-
-Potwierdzone przykłady kierunku:
-
-- skoczek zamiast zbijać figurę zamienia się z nią miejscami;
-- gońce mogą odbijać się od ścian planszy.
+Przed rozgrywką każdy gracz wybiera **2 karty** z kolekcji kilkudziesięciu (MVP zostaje przy 1 — patrz sekcja 8 dla obecnych 12 zaimplementowanych kart, w tym skoczka zamieniającego się miejscami i odbijającego się gońca, które były tu wcześniej wymienione jako kierunek, a teraz są gotowe).
 
 Wymagania dla systemu:
 
@@ -204,6 +199,11 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 - Widok planszy online zawsze pokazuje własną połowę gracza u dołu ekranu (odbicie czysto wizualne, bez wpływu na logikę/sieć).
 - Wybór figury przy promocji pionka (hetman/wieża/goniec/skoczek) zamiast automatycznej promocji do hetmana.
 - Dwa zapisywalne loadouty (ustawienie figur + karta) na gracza, przełączane w kreatorze armii; w lokalnym versus biały i czarny niezależnie wybierają, którym loadoutem grają, tuż przed rzutem monetą.
+- Placeholder ekranu wyniku (`scenes/wynik.tscn`) zamiast powrotu od razu do menu: „<nick> wygrywa” zawsze, a online dodatkowo duży napis „W FAPS”/„L FAPS” z perspektywy każdego z graczy osobno (lokalnie bez tego, bo obaj grający patrzą w ten sam ekran). Remis pokazuje „Remis”.
+- Szachownica wyśrodkowana na ekranie podczas meczu (`BoardRoot`, przeliczane też przy zmianie rozmiaru okna) — wcześniej po zmianie trybu skalowania zostawała przy lewej krawędzi.
+- 12 kart w `card_registry.gd`/`card_hooks.gd` (pierwotnych 5 + 7 nowych): `knight_swap` (zamiana miejsc zamiast bicia, taki skoczek nie daje szacha), `bouncing_bishop` (odbija się od krawędzi i niezniszczalnych figur), `castling` (bez śledzenia ruchów i bez limitu — działa dla każdej pary król+wieża w linii), `double_step_pawns` (piony zawsze mogą o dwa pola), `omni_pawns` (piony ruszają się we wszystkie 4 strony, biją tylko po skosie do przodu), `board_hole` (klawisz `X`, jedna trwała dziura dla właściciela karty, odwrotność dokładania pola), `board_10x10` (podnosi limit planszy z 8×8 do 10×10).
+
+Kolekcja kart nadal mieści się na jednej stronie (12 ≤ 16/stronę), więc paginacja w `karty.gd` nie wymagała żadnej zmiany.
 
 ### Niezaimplementowane
 
@@ -242,6 +242,7 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 | `hud.gd` | Liczniki dodatkowych pól i wizualizacja aktualnej tury. |
 | `rzut_moneta.gd`, `control.gd` | Zsynchronizowana, pełnoekranowa prezentacja rzutu monety 3D oraz przywracanie globalnych ustawień czasu/fizyki. |
 | `tlo_ekranu_glownego.gd` | Animowane tło menu/meczu; samo skaluje się do rzeczywistego rozmiaru okna i przyjmuje barwę od `main.gd`/`menu_glowne.gd`. |
+| `wynik.gd` | Placeholder ekranu wyniku po meczu; czyta dane z tymczasowych, nietrwałych pól w `PozycjaOsobista`. |
 | `tests/*.gd` | Headlessowy zestaw testów jednostkowych silnika zasad (`tests/run_tests.gd` jako punkt wejścia). |
 
 Autoloady zdefiniowane w `project.godot`:
