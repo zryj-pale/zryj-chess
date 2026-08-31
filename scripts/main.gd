@@ -370,16 +370,21 @@ func ruch(figura, cel: Vector2i, from_network := false) -> bool:
 	return true
 
 func _apply_move(figura, cel: Vector2i) -> void:
-	# Castling (both clients compute this identically and deterministically
-	# from the synced board state, so it never needs its own network
-	# message): detect it before figura actually moves, then move the
-	# matching rook to keep it in sync.
+	# Castling and knight_swap (both clients compute these identically and
+	# deterministically from the synced board state, so neither needs its
+	# own network message): detect them before figura actually moves.
 	var pieces_before := _rules_pieces()
-	var king_index := GameRules.piece_index_at(pieces_before, pozycja(figura))
-	var castle := GameRules.find_castle_move(active_cards, pieces_before, dostepne_pola, king_index, cel, duck_position)
-	var captured = stoi_figura(cel)
-	if captured:
-		zbicie(captured)
+	var mover_index := GameRules.piece_index_at(pieces_before, pozycja(figura))
+	var mover_piece: Dictionary = pieces_before[mover_index] if mover_index != -1 else {}
+	var castle := GameRules.find_castle_move(active_cards, pieces_before, dostepne_pola, mover_index, cel, duck_position)
+	var occupant = stoi_figura(cel)
+	var is_swap := occupant != null and CardHooks.piece_swaps_on_contact(active_cards, mover_piece)
+	if is_swap:
+		# knight_swap: the occupant (friend or foe, even a color's last
+		# king) trades places instead of being captured.
+		occupant.position = plansza.map_to_local(_view(pozycja(figura)))
+	elif occupant:
+		zbicie(occupant)
 	figura.position = plansza.map_to_local(_view(cel))
 	if not castle.is_empty():
 		var rook_figure = stoi_figura(castle["rook_from"])
