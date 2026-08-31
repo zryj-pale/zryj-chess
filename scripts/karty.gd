@@ -1,14 +1,17 @@
 extends Control
 
 # Card collection screen. Pagination is sized for a large future collection
-# (16 cards per page in a 4x4 grid) even though only a handful of cards
-# exist today - adding cards to CardRegistry never requires touching this
-# screen, pages are derived purely from CardRegistry.all_ids().size().
-const CARDS_PER_PAGE := 16
+# (8 cards per page in a 4x2 grid) even though only a handful of cards exist
+# today - adding cards to CardRegistry never requires touching this screen,
+# pages are derived purely from CardRegistry.all_ids().size(). The grid also
+# sits in a vertical-only ScrollContainer so a page that still doesn't fit a
+# short window scrolls instead of pushing the header/footer buttons
+# off-screen.
+const CARDS_PER_PAGE := 8
 const GRID_COLUMNS := 4
 const CARD_SIZE := Vector2(108, 144) # 3:4 aspect ratio
 
-@onready var grid: GridContainer = $Margin/VBox/GridCenter/Grid
+@onready var grid: GridContainer = $Margin/VBox/GridScroll/Grid
 @onready var page_label: Label = $Margin/VBox/Footer/PageLabel
 @onready var prev_button: Button = $Margin/VBox/Footer/PrevButton
 @onready var next_button: Button = $Margin/VBox/Footer/NextButton

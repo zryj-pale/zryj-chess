@@ -46,11 +46,13 @@ size_flags_horizontal = 4
 toggle_mode = true
 text = "Brak karty"
 
-[node name="GridCenter" type="CenterContainer" parent="Margin/VBox"]
+[node name="GridScroll" type="ScrollContainer" parent="Margin/VBox"]
 layout_mode = 2
 size_flags_vertical = 3
+size_flags_horizontal = 4
+horizontal_scroll_mode = 0
 
-[node name="Grid" type="GridContainer" parent="Margin/VBox/GridCenter"]
+[node name="Grid" type="GridContainer" parent="Margin/VBox/GridScroll"]
 layout_mode = 2
 theme_override_constants/h_separation = 16
 theme_override_constants/v_separation = 16
