@@ -5,6 +5,9 @@ const TLO_EKRANU_GLOWNEGO = preload("uid://tvwbs626pujp")
 @onready var nickname_input: LineEdit = $NicknameInput
 @onready var nickname_status: Label = $NicknameStatus
 @onready var nickname_label: Label = $NicknameLabel
+@onready var options_button: Button = $OptionsButton
+@onready var options_panel: VBoxContainer = $OptionsPanel
+@onready var mute_music_check: CheckButton = $OptionsPanel/MuteMusic
 
 var tlo = null
 
@@ -16,12 +19,23 @@ func _ready() -> void:
 	nickname_input.text_submitted.connect(func(_text: String): _save_nickname())
 	nickname_label.mouse_filter = Control.MOUSE_FILTER_STOP
 	nickname_label.gui_input.connect(_on_nickname_label_input)
+	options_button.pressed.connect(_on_options_pressed)
+	mute_music_check.button_pressed = PozycjaOsobista.music_muted
+	mute_music_check.toggled.connect(_on_mute_music_toggled)
 	_refresh_nickname_visibility()
 	_refresh_background_tint()
 	$muzyka.play()
 
+func _on_options_pressed() -> void:
+	options_panel.visible = not options_panel.visible
+
+func _on_mute_music_toggled(muted: bool) -> void:
+	PozycjaOsobista.set_music_muted(muted)
+
 func _refresh_background_tint() -> void:
-	tlo.set_match_tint(PozycjaOsobista.nickname_color(PozycjaOsobista.nickname))
+	# Uses the live input text (not just the saved nickname) so the tint
+	# updates as the player types, before they even confirm the nickname.
+	tlo.set_match_tint(PozycjaOsobista.nickname_color(nickname_input.text))
 
 # Pole nicku ma być widoczne tylko dopóki nick nie jest ustawiony; potem
 # chowa się, żeby nie zasłaniać reszty menu. Kliknięcie etykiety pozwala
@@ -63,6 +77,7 @@ func _on_online_pressed() -> void:
 
 func _on_nickname_changed(_value: String) -> void:
 	nickname_status.text = ""
+	_refresh_background_tint()
 
 func _save_nickname() -> bool:
 	if PozycjaOsobista.set_nickname(nickname_input.text):

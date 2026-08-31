@@ -102,6 +102,7 @@ centered = false
 [node name="muzyka w tle" type="AudioStreamPlayer" parent="dzwiek"]
 stream = ExtResource("3_nuxga")
 pitch_scale = 0.8
+bus = &"Music"
 
 [node name="zbicie" type="AudioStreamPlayer" parent="dzwiek"]
 stream = ExtResource("4_y617c")

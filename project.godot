@@ -21,7 +21,7 @@ boot_splash/image="uid://cmbtixykhyb0q"
 
 [audio]
 
-buses/default_bus_layout=""
+buses/default_bus_layout="res://default_bus_layout.tres"
 
 [autoload]
 
