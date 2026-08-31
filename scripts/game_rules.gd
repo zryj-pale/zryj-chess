@@ -17,6 +17,16 @@ static func king_count(pieces: Array, color: String) -> int:
 			count += 1
 	return count
 
+# Bare king vs bare king: neither side can ever deliver check again, so the
+# match is a dead draw regardless of whose turn it is. Deliberately narrow -
+# only the exact "nothing left but the two last kings" case - rather than a
+# full insufficient-material table, since that's the scenario that's
+# actually reachable by playing the game out.
+static func is_dead_position(pieces: Array) -> bool:
+	if pieces.size() != 2:
+		return false
+	return str(pieces[0]["type"]) == "K" and str(pieces[1]["type"]) == "K"
+
 static func is_in_check(pieces: Array, board: Array[Vector2i], color: String, cards: Dictionary = {}, duck: Vector2i = Vector2i(-99, -99)) -> bool:
 	# Additional kings are normal capturable units. Only the final king is checked.
 	if king_count(pieces, color) != 1:

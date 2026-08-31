@@ -52,6 +52,7 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_center_board)
 	_create_duck_marker()
 	_create_promotion_picker()
+	get_viewport().size_changed.connect(func(): _center_screen_control(promotion_picker, Vector2(300, 70)))
 	$"dzwiek/muzyka w tle".play()
 	if NetworkManager.is_online:
 		my_color = "b" if NetworkManager.is_host else "c"
@@ -80,6 +81,17 @@ func _apply_active_cards_setup() -> void:
 	_center_board()
 	bialy_holes = CardHooks.starting_holes(active_cards, "b")
 	czarny_holes = CardHooks.starting_holes(active_cards, "c")
+
+# Anchor percentages (0.5 = center) only resolve against the VIEWPORT when
+# there's no Control ancestor above a node - but that resolution can be
+# stale/wrong for a Control built and added to a Node2D scene root at
+# runtime (the loadout and promotion pickers), same class of problem
+# control.gd already works around for the coin-toss overlay. Sidestep it
+# entirely: leave anchors at their 0 default and set position/size directly
+# from the actual viewport rect.
+func _center_screen_control(control: Control, size: Vector2) -> void:
+	control.size = size
+	control.position = ((get_viewport_rect().size - size) / 2.0).round()
 
 func _center_board() -> void:
 	var board_pixels := Vector2((board_max + 1) * TILE_SIZE, (board_max + 1) * TILE_SIZE)
@@ -133,14 +145,6 @@ func _show_loadout_picker() -> void:
 	white_loadout_choice = default_index
 	black_loadout_choice = default_index
 	var picker := PanelContainer.new()
-	picker.anchor_left = 0.5
-	picker.anchor_right = 0.5
-	picker.anchor_top = 0.5
-	picker.anchor_bottom = 0.5
-	picker.offset_left = -170.0
-	picker.offset_right = 170.0
-	picker.offset_top = -95.0
-	picker.offset_bottom = 95.0
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 10)
 	picker.add_child(vbox)
@@ -161,6 +165,7 @@ func _show_loadout_picker() -> void:
 	)
 	vbox.add_child(start_button)
 	add_child(picker)
+	_center_screen_control(picker, Vector2(340, 190))
 
 func _build_loadout_row(label_text: String, buttons_out: Array[Button], which: int) -> HBoxContainer:
 	var row := HBoxContainer.new()
@@ -316,7 +321,7 @@ func stan_placement(pole: Vector2i, pressed: bool) -> void:
 		stan = Stany.IDLE
 		return
 	if pressed and not _prev_mouse_pressed:
-		if not pole_na_planszy(pole) and pole_w_granicach(pole):
+		if not pole_na_planszy(pole) and pole_w_granicach(pole) and not (pole in holes):
 			_apply_tile(pole)
 			if NetworkManager.is_online:
 				NetworkManager.submit_action({"type": "tile", "x": pole.x, "y": pole.y})
@@ -435,6 +440,9 @@ func _finish_after_move(mover: String) -> void:
 		"b": bialy_tiles += 1
 		"c": czarny_tiles += 1
 	koniec_tury()
+	if GameRules.is_dead_position(_rules_pieces()):
+		koniec_gry("")
+		return
 	if czy_szach(kolor_posuniecia):
 		$dzwiek/szach.play()
 		if not GameRules.has_legal_move(_rules_pieces(), dostepne_pola, kolor_posuniecia, active_cards, duck_position):
@@ -481,7 +489,7 @@ func _on_network_action(action: Dictionary) -> void:
 				ruch(figura, to, true)
 		"tile":
 			var pole := Vector2i(int(action.get("x", -99)), int(action.get("y", -99)))
-			if kolor_posuniecia != my_color and not pole_na_planszy(pole) and pole_w_granicach(pole):
+			if kolor_posuniecia != my_color and not pole_na_planszy(pole) and pole_w_granicach(pole) and not (pole in holes):
 				_apply_tile(pole)
 		"hole":
 			var hole_target := Vector2i(int(action.get("x", -99)), int(action.get("y", -99)))
@@ -584,7 +592,14 @@ func pole_na_planszy(pole: Vector2i) -> bool:
 func dodaj_pole(pole: Vector2i) -> void:
 	if not pole_w_granicach(pole) or pole_na_planszy(pole) or pole in holes:
 		return
-	plansza.set_cell(_view(pole), 0, _view(pole))
+	var cell := _view(pole)
+	# The board texture's atlas only defines an 8x8 grid of source regions
+	# (coords 0..7 on each axis); board_10x10 lets cells reach 8/9, so the
+	# atlas coordinate has to wrap back into range or Godot silently draws
+	# nothing for that cell - the tile would look invisible even though it's
+	# genuinely part of dostepne_pola.
+	var atlas_cell := Vector2i(cell.x % 8, cell.y % 8)
+	plansza.set_cell(cell, 0, atlas_cell)
 	dostepne_pola.append(pole)
 
 func _create_duck_marker() -> void:
@@ -598,14 +613,6 @@ func _create_promotion_picker() -> void:
 	promotion_picker = PanelContainer.new()
 	promotion_picker.visible = false
 	promotion_picker.z_index = 10
-	promotion_picker.anchor_left = 0.5
-	promotion_picker.anchor_right = 0.5
-	promotion_picker.anchor_top = 0.5
-	promotion_picker.anchor_bottom = 0.5
-	promotion_picker.offset_left = -150.0
-	promotion_picker.offset_right = 150.0
-	promotion_picker.offset_top = -35.0
-	promotion_picker.offset_bottom = 35.0
 	var box := HBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 6)
@@ -617,6 +624,7 @@ func _create_promotion_picker() -> void:
 		button.pressed.connect(_on_promotion_chosen.bind(typ))
 		box.add_child(button)
 	add_child(promotion_picker)
+	_center_screen_control(promotion_picker, Vector2(300, 70))
 
 func _can_place_duck(pole: Vector2i) -> bool:
 	return pole_na_planszy(pole) and pole != duck_position and stoi_figura(pole) == null and not GameRules.is_in_check(_rules_pieces(), dostepne_pola, kolor_posuniecia, active_cards, pole)

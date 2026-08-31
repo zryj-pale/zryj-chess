@@ -39,4 +39,14 @@ static func run() -> TestSuite:
 	]
 	t.check("a king with open squares has a legal move", GameRules.has_legal_move(free_pieces, board, "c"))
 
+	# --- Dead position: nothing left but the two last kings ---
+	t.check("bare king vs bare king is a dead position", GameRules.is_dead_position(free_pieces))
+	var one_extra_piece := [
+		{"type": "K", "color": "c", "x": 3, "y": 3},
+		{"type": "K", "color": "b", "x": 1, "y": 1},
+		{"type": "P", "color": "b", "x": 5, "y": 5},
+	]
+	t.check("a single extra piece is enough to keep it alive",
+		not GameRules.is_dead_position(one_extra_piece))
+
 	return t
