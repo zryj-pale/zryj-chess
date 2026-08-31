@@ -17,14 +17,10 @@ var drag_preview = null
 var dragged_figure = null
 var drag_origin := Vector2i.ZERO
 var drag_moved := false
-var card_buttons: Dictionary = {}
-var selected_card_label: Label
-var card_panel: VBoxContainer
 
 func _ready() -> void:
 	generacja_pol(1, 4, 6, 6)
 	synchronizacja()
-	_create_card_panel()
 	cards_toggle.pressed.connect(_on_cards_toggle_pressed)
 
 func _process(_delta: float) -> void:
@@ -204,44 +200,5 @@ func _on_menu_pressed() -> void:
 		return
 	get_tree().change_scene_to_file("res://scenes/menu glowne.tscn")
 
-func _create_card_panel() -> void:
-	card_panel = VBoxContainer.new()
-	card_panel.position = Vector2(10, 155)
-	card_panel.size = Vector2(492, 140)
-	card_panel.add_theme_constant_override("separation", 1)
-	card_panel.visible = false
-	var title := Label.new()
-	title.text = "Wybierz jedną kartę (kliknij aktywną ponownie, aby odznaczyć)"
-	title.add_theme_font_size_override("font_size", 11)
-	card_panel.add_child(title)
-	selected_card_label = Label.new()
-	card_panel.add_child(selected_card_label)
-	for id in CardRegistry.all_ids():
-		var button := Button.new()
-		button.text = CardRegistry.display_name(id) + " — " + CardRegistry.description(id)
-		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		button.toggle_mode = true
-		button.custom_minimum_size = Vector2(0, 18)
-		button.add_theme_font_size_override("font_size", 10)
-		button.pressed.connect(_on_card_pressed.bind(id))
-		card_panel.add_child(button)
-		card_buttons[id] = button
-	add_child(card_panel)
-	_refresh_cards()
-
 func _on_cards_toggle_pressed() -> void:
-	card_panel.visible = not card_panel.visible
-	cards_toggle.text = "Ukryj karty" if card_panel.visible else "Wybierz kartę"
-
-func _on_card_pressed(id: String) -> void:
-	PozycjaOsobista.wybrana_karta = "" if PozycjaOsobista.wybrana_karta == id else id
-	_refresh_cards()
-
-func _refresh_cards() -> void:
-	if not selected_card_label:
-		return
-	selected_card_label.text = "Aktywna: " + CardRegistry.display_name(PozycjaOsobista.wybrana_karta)
-	for id in card_buttons:
-		var button: Button = card_buttons[id]
-		button.button_pressed = PozycjaOsobista.wybrana_karta == id
+	get_tree().change_scene_to_file("res://scenes/karty.tscn")

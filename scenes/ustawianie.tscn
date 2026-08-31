@@ -146,7 +146,7 @@ offset_left = 158.0
 offset_top = 122.0
 offset_right = 354.0
 offset_bottom = 150.0
-text = "Wybierz kartę"
+text = "Karty"
 
 [node name="PieceMenu" parent="." instance=ExtResource("8_menu")]
 
