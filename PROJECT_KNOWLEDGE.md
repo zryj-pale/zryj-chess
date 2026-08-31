@@ -118,7 +118,8 @@ To są zasady zaimplementowane obecnie; nie są jeszcze pełną, ostateczną spe
 - Jest bicie, wykrywanie szacha, mata i pata. Walidacja ruchu odbywa się na kopii stanu planszy, bez chwilowego przesuwania widoku figury.
 - Kolor z więcej niż jednym królem może tracić króle jak zwykłe figury; standardowa ochrona szachem zaczyna działać natychmiast po pozostawieniu mu jednego króla.
 - Przy pojedynczym szachu w pozycji startowej ruch dostaje szachowany kolor. Jeżeli oba pojedyncze króle są szachowane, host losuje pozycje wszystkich figur na planszy 6×6 do czasu uzyskania pozycji bez szacha.
-- Pion promuje się automatycznie do hetmana.
+- Promujący się pion daje graczowi wybór figury (hetman/wieża/goniec/skoczek) zamiast automatycznej promocji do hetmana; w online wybór dokonuje wyłącznie posuwający pionem, drugi klient dostaje go jako osobną akcję sieciową.
+- Online każdy gracz zawsze widzi swoją połowę planszy u dołu ekranu (gość ma widok lustrzanie odbity względem hosta); w trybie lokalnym nic się nie odbija, bo obaj grający dzielą jeden ekran.
 - Nie ma jeszcze roszady, bicia w przelocie, ruchu pionem o dwa pola ani mechaniki pasowania.
 
 W kreatorze figur:
@@ -166,11 +167,11 @@ Możliwe kategorie kart:
 
 ### Lokalny prototyp
 
-Gra na jednym komputerze. Działa jako główne środowisko testowania zasad.
+Gra na jednym komputerze. Działa jako główne środowisko testowania zasad. Przed rzutem monetą obaj gracze wybierają (niezależnie), którym z dwóch zapisanych loadoutów (ustawienie + karta) grają — patrz sekcja 9, `pozycja_osobista.gd`.
 
 ### Online
 
-Pokój dla 2 osób. Host gra białymi, dołączający czarnymi. Po zsynchronizowaniu ustawień host losuje wynik, a obie strony oglądają pełnoekranową animację rzutu monetą 3D; orzeł daje pierwszy ruch białym, reszka czarnym, z wyjątkiem startowego szacha. Implementacja używa UDP, próbuje P2P i ma awaryjny relay przez VPS.
+Pokój dla 2 osób, dołączany jednym przyciskiem "Graj online" — kto pierwszy dołączy do danego kodu pokoju, dostaje od serwera rolę hosta (białe), kolejny gracz rolę gościa (czarne); ponowne dołączenie tym samym tokenem zachowuje wcześniej przydzieloną rolę. Zawsze używany jest pierwszy zapisany loadout (bez wyboru, w przeciwieństwie do trybu lokalnego). Po zsynchronizowaniu ustawień host losuje wynik, a obie strony oglądają pełnoekranową animację rzutu monetą 3D; orzeł daje pierwszy ruch białym, reszka czarnym, z wyjątkiem startowego szacha. Implementacja używa UDP, próbuje P2P i ma awaryjny relay przez VPS. Gość widzi planszę odbitą tak, żeby jego własne figury zawsze były u dołu jego ekranu.
 
 ### Kampania / tryb fabularny
 
@@ -198,6 +199,11 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 - Serwer VPS wdrożony jako usługa systemd (`zryj-chess.service`, dedykowany użytkownik `chessserver`, `Restart=always`), odporna na błędnie sformatowane pakiety (w tym historyczny przypadek `GAME_PING` bez drugiego dwukropka) — zweryfikowane testem end-to-end protokołu z zewnętrznej sieci.
 - Testy jednostkowe silnika zasad w `tests/`, uruchamiane headlessowo bez otwierania edytora:
   `godot --headless --path . --script res://tests/run_tests.gd` (kod wyjścia = liczba nieudanych asercji).
+- Przycisk "Opcje" pod polem nicku z wyciszeniem muzyki (osobna szyna audio `Music`, nie wycisza efektów dźwiękowych), zapamiętywane w profilu gracza.
+- Jeden przycisk dołączania online zamiast osobnych "host"/"dołącz" — rolę przydziela serwer wg kolejności dołączenia do kodu pokoju.
+- Widok planszy online zawsze pokazuje własną połowę gracza u dołu ekranu (odbicie czysto wizualne, bez wpływu na logikę/sieć).
+- Wybór figury przy promocji pionka (hetman/wieża/goniec/skoczek) zamiast automatycznej promocji do hetmana.
+- Dwa zapisywalne loadouty (ustawienie figur + karta) na gracza, przełączane w kreatorze armii; w lokalnym versus biały i czarny niezależnie wybierają, którym loadoutem grają, tuż przed rzutem monetą.
 
 ### Niezaimplementowane
 
@@ -223,15 +229,15 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 
 | Komponent | Odpowiedzialność |
 | --- | --- |
-| `main.gd` | Stan meczu, ruchy, walidacja, tury, szach/mat/pat, rozszerzanie planszy, akcje sieciowe i dynamiczna barwa tła zależna od materiału. |
+| `main.gd` | Stan meczu, ruchy, walidacja, tury, szach/mat/pat, rozszerzanie planszy, akcje sieciowe, wybór figury przy promocji, lustrzany widok planszy online (`_view()`) i dynamiczna barwa tła zależna od materiału. W trybie lokalnym pokazuje ekran wyboru loadoutu przed rzutem monetą. |
 | `game_rules.gd` | Czysty silnik zasad: generowanie ruchów, ataki, szach, wielokrólewskość, mata/pat, dynamiczna promocja i losowanie bezpiecznej pozycji startowej. Pyta `CardHooks` ogólnie o efekty kart, nie zna konkretnych ID. |
 | `cards/card_registry.gd` | Dane kart: id, nazwa, opis, deklarowane hooki oraz walidacja niekompatybilnych par (`is_compatible`). |
 | `cards/card_hooks.gd` | Jedyne miejsce mapujące hooki (moves/capture/attacks/blocked_squares/win_condition/after_move/stalemate) na konkretne ID kart; `game_rules.gd` i `main.gd` wołają je generycznie. |
-| `ustawianie.gd` | Kreator armii, budżet punktów, drag-and-drop, zapis neutralnego układu; przycisk otwierający kolekcję kart. |
+| `ustawianie.gd` | Kreator armii, budżet punktów, drag-and-drop; przełącznik dwóch loadoutów i przycisk otwierający kolekcję kart. |
 | `karty.gd` | Paginowany ekran kolekcji kart (16/stronę, siatka 4×4, kafelki 3:4) z jawną opcją braku karty. |
-| `network_manager.gd` | Pokoje online, P2P hole punching, relay, niezawodne przesyłanie akcji, synchronizacja nicków oraz walidacja kompatybilności kart przed startem meczu. |
-| `lobby.gd` | Interfejs tworzenia i dołączania do pokoju. |
-| `pozycja_osobista.gd` | Autoload przechowujący układ, kartę, profil nicku i deterministyczny kolor gracza. |
+| `network_manager.gd` | Pokoje online, P2P hole punching, relay, niezawodne przesyłanie akcji, synchronizacja nicków, walidacja kompatybilności kart oraz przydzielanie roli host/gość wg kolejności dołączenia (serwer decyduje, nie klient). |
+| `lobby.gd` | Interfejs dołączania do pokoju jednym przyciskiem; zawsze wysyła pierwszy zapisany loadout. |
+| `pozycja_osobista.gd` | Autoload przechowujący dwa loadouty (układ + karta), profil nicku, wyciszenie muzyki i deterministyczny kolor gracza — wszystko trwale zapisywane w `profile.cfg`. |
 | `figura.gd` | Prezentacja figury, hitbox, typ, kolor i promocja. |
 | `hud.gd` | Liczniki dodatkowych pól i wizualizacja aktualnej tury. |
 | `rzut_moneta.gd`, `control.gd` | Zsynchronizowana, pełnoekranowa prezentacja rzutu monety 3D oraz przywracanie globalnych ustawień czasu/fizyki. |
@@ -272,8 +278,9 @@ Poza katalogiem gry, w `C:\Users\Mariusz\Desktop\vibe code\files\` znajdują si�
 Przepływ online:
 
 ```text
-Host i gość rejestrują kod pokoju na VPS
-        → serwer przekazuje im adresy UDP
+Oboje klientów wysyła GAME_JOIN:kod:token (bez roli)
+        → serwer odsyła GAME_ROLE:token:host|guest (pierwszy = host, kolejny = guest)
+        → serwer przekazuje im adresy UDP (GAME_PEER)
         → klienci próbują bezpośredniego P2P
         → gdy P2P nie działa, używają relaya VPS
 ```
