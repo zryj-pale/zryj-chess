@@ -2,11 +2,13 @@ extends Node2D
 
 @onready var plansza: TileMapLayer = $TileMapLayer
 
-enum Stany { IDLE, GRAB, SELECT, PLACEMENT, DUCK }
+enum Stany { IDLE, GRAB, SELECT, PLACEMENT, DUCK, PROMOTION }
 const OKNO = preload("res://scenes/okno_rzutu.tscn")
 const DUCK_TEXTURE = preload("res://assets/duck.png")
 const MAIN_MENU_BACKGROUND = preload("res://scenes/tlo_ekranu_glownego.tscn")
 const MATERIAL_VALUES := {"P": 1, "S": 2, "G": 2, "W": 4, "H": 6, "K": 6}
+const PROMOTION_CHOICES := ["H", "W", "G", "S"]
+const PROMOTION_LABELS := {"H": "Hetman", "W": "Wieża", "G": "Goniec", "S": "Skoczek"}
 
 var stan := Stany.IDLE
 var figury: Array = []
@@ -27,6 +29,9 @@ var active_cards := {"b": "", "c": ""}
 var duck_position := Vector2i(-99, -99)
 var duck_pending := false
 var duck_marker: Sprite2D
+var promotion_pending := false
+var promotion_figure = null
+var promotion_picker: Control
 var match_background = null
 var player_nicknames := {"b": "", "c": ""}
 var player_colors := {"b": Color.WHITE, "c": Color.WHITE}
@@ -50,6 +55,7 @@ func _ready() -> void:
 		start_local_match()
 	$"dzwiek/muzyka w tle".play()
 	_create_duck_marker()
+	_create_promotion_picker()
 	_refresh_player_colors()
 	_refresh_background_tint()
 
@@ -169,12 +175,12 @@ func stan_grab(pole: Vector2i, pressed: bool) -> void:
 		wybrana = chwycona
 		stan = Stany.SELECT
 	elif ruch(chwycona, pole):
-		if not duck_pending:
+		if not duck_pending and not promotion_pending:
 			stan = Stany.IDLE
 	else:
 		$dzwiek/zakaz.play()
 		wybrana = null
-		if not duck_pending:
+		if not duck_pending and not promotion_pending:
 			stan = Stany.IDLE
 	chwycona = null
 
@@ -188,7 +194,7 @@ func stan_select(pole: Vector2i, pressed: bool) -> void:
 	if not ruch(wybrana, pole):
 		wybrana = null
 		$dzwiek/zakaz.play()
-	if not duck_pending:
+	if not duck_pending and not promotion_pending:
 		stan = Stany.IDLE
 
 func stan_placement(pole: Vector2i, pressed: bool) -> void:
@@ -235,11 +241,39 @@ func _apply_move(figura, cel: Vector2i) -> void:
 	if captured:
 		zbicie(captured)
 	figura.global_position = plansza.map_to_local(cel)
+	var mover := kolor_posuniecia
 	if moze_promowac(figura):
-		figura.promocja("H")
+		_begin_promotion(figura, mover)
+		return
+	_continue_after_move(mover)
+
+func _begin_promotion(figura, mover: String) -> void:
+	promotion_pending = true
+	promotion_figure = figura
+	if NetworkManager.is_online and figura.kolor != my_color:
+		# The other client is choosing; wait for their "promote" action.
+		# Their own turn hasn't ended yet, so our existing turn-based input
+		# checks already keep us from touching the board meanwhile.
+		return
+	stan = Stany.PROMOTION
+	promotion_picker.visible = true
+
+func _on_promotion_chosen(piece_type: String) -> void:
+	if not promotion_pending:
+		return
+	var figura = promotion_figure
+	figura.promocja(piece_type)
+	promotion_pending = false
+	promotion_figure = null
+	promotion_picker.visible = false
+	if NetworkManager.is_online:
+		NetworkManager.submit_action({"type": "promote", "piece": piece_type})
+	stan = Stany.IDLE
+	_continue_after_move(kolor_posuniecia)
+
+func _continue_after_move(mover: String) -> void:
 	_refresh_background_tint()
 	$dzwiek/ruch.play()
-	var mover := kolor_posuniecia
 	var winner := CardHooks.win_condition_winner(active_cards, _rules_pieces(), dostepne_pola, mover)
 	if not winner.is_empty():
 		koniec_gry(winner)
@@ -302,6 +336,13 @@ func _on_network_action(action: Dictionary) -> void:
 			if kolor_posuniecia != my_color and duck_pending and _can_place_duck(duck_target):
 				_apply_duck(duck_target)
 				_finish_after_move(kolor_posuniecia)
+		"promote":
+			if promotion_pending and promotion_figure:
+				var piece_type := str(action.get("piece", "H"))
+				promotion_figure.promocja(piece_type)
+				promotion_pending = false
+				promotion_figure = null
+				_continue_after_move(kolor_posuniecia)
 		"game_over":
 			koniec_gry(str(action.get("winner", "")), true)
 
@@ -386,6 +427,30 @@ func _create_duck_marker() -> void:
 	duck_marker.scale = Vector2(0.28, 0.28)
 	duck_marker.position = Vector2(-999, -999)
 	add_child(duck_marker)
+
+func _create_promotion_picker() -> void:
+	promotion_picker = PanelContainer.new()
+	promotion_picker.visible = false
+	promotion_picker.z_index = 10
+	promotion_picker.anchor_left = 0.5
+	promotion_picker.anchor_right = 0.5
+	promotion_picker.anchor_top = 0.5
+	promotion_picker.anchor_bottom = 0.5
+	promotion_picker.offset_left = -150.0
+	promotion_picker.offset_right = 150.0
+	promotion_picker.offset_top = -35.0
+	promotion_picker.offset_bottom = 35.0
+	var box := HBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 6)
+	promotion_picker.add_child(box)
+	for typ in PROMOTION_CHOICES:
+		var button := Button.new()
+		button.text = str(PROMOTION_LABELS[typ])
+		button.custom_minimum_size = Vector2(68, 54)
+		button.pressed.connect(_on_promotion_chosen.bind(typ))
+		box.add_child(button)
+	add_child(promotion_picker)
 
 func _can_place_duck(pole: Vector2i) -> bool:
 	return pole_na_planszy(pole) and pole != duck_position and stoi_figura(pole) == null and not GameRules.is_in_check(_rules_pieces(), dostepne_pola, kolor_posuniecia, active_cards, pole)
