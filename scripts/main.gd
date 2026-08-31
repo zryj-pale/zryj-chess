@@ -4,14 +4,13 @@ extends Node2D
 @onready var board_root: Node2D = $BoardRoot
 const TILE_SIZE := 64
 
-enum Stany { IDLE, GRAB, SELECT, PLACEMENT, DUCK, PROMOTION }
+enum Stany { IDLE, GRAB, SELECT, PLACEMENT, DUCK, PROMOTION, HOLE_PLACEMENT }
 const OKNO = preload("res://scenes/okno_rzutu.tscn")
 const DUCK_TEXTURE = preload("res://assets/duck.png")
 const MAIN_MENU_BACKGROUND = preload("res://scenes/tlo_ekranu_glownego.tscn")
 const MATERIAL_VALUES := {"P": 1, "S": 2, "G": 2, "W": 4, "H": 6, "K": 6}
 const PROMOTION_CHOICES := ["H", "W", "G", "S"]
 const PROMOTION_LABELS := {"H": "Hetman", "W": "Wieża", "G": "Goniec", "S": "Skoczek"}
-const BOARD_MAX := 7 # matches pole_w_granicach()'s 0..7 range
 
 var stan := Stany.IDLE
 var figury: Array = []
@@ -41,12 +40,15 @@ var player_colors := {"b": Color.WHITE, "c": Color.WHITE}
 var board_flipped := false
 var white_loadout_choice := 0
 var black_loadout_choice := 0
+var board_max := 7 # 0..7 by default; board_10x10 raises this to 9
+var bialy_holes := 0
+var czarny_holes := 0
+var holes: Array[Vector2i] = []
 
 func _ready() -> void:
 	add_to_group("game_main")
 	_add_menu_background()
 	generacja_pol(6)
-	_center_board()
 	get_viewport().size_changed.connect(_center_board)
 	_create_duck_marker()
 	_create_promotion_picker()
@@ -60,6 +62,7 @@ func _ready() -> void:
 		board_flipped = my_color == "c"
 		active_cards = {"b": NetworkManager.white_card, "c": NetworkManager.black_card}
 		player_nicknames = {"b": NetworkManager.white_nickname, "c": NetworkManager.black_nickname}
+		_apply_active_cards_setup()
 		NetworkManager.action_received.connect(_on_network_action)
 		NetworkManager.player_disconnected.connect(_on_player_disconnected)
 		ustawienie_z_pozycji(NetworkManager.white_pieces, NetworkManager.black_pieces)
@@ -69,8 +72,17 @@ func _ready() -> void:
 	else:
 		_show_loadout_picker()
 
+# Board size (board_10x10) and hole allowance (board_hole) depend on which
+# cards are active, so this only runs once active_cards is actually known -
+# right away for online, or once the local loadout picker's choice is made.
+func _apply_active_cards_setup() -> void:
+	board_max = CardHooks.board_max(active_cards)
+	_center_board()
+	bialy_holes = CardHooks.starting_holes(active_cards, "b")
+	czarny_holes = CardHooks.starting_holes(active_cards, "c")
+
 func _center_board() -> void:
-	var board_pixels := Vector2((BOARD_MAX + 1) * TILE_SIZE, (BOARD_MAX + 1) * TILE_SIZE)
+	var board_pixels := Vector2((board_max + 1) * TILE_SIZE, (board_max + 1) * TILE_SIZE)
 	var viewport_size := get_viewport_rect().size
 	board_root.position = ((viewport_size - board_pixels) / 2.0).round()
 
@@ -185,6 +197,7 @@ func _begin_local_match(white_index: int, black_index: int) -> void:
 	var black_loadout: Dictionary = PozycjaOsobista.loadouts[black_index]
 	active_cards = {"b": str(white_loadout.get("karta", "")), "c": str(black_loadout.get("karta", ""))}
 	player_nicknames = {"b": PozycjaOsobista.nickname, "c": PozycjaOsobista.nickname}
+	_apply_active_cards_setup()
 	for piece in white_loadout.get("ustawienie", []):
 		dodaj(str(piece[0]), "b", piece[1])
 	for piece in black_loadout.get("ustawienie", []):
@@ -233,6 +246,7 @@ func _process(_delta: float) -> void:
 		Stany.SELECT: stan_select(pole, pressed)
 		Stany.PLACEMENT: stan_placement(pole, pressed)
 		Stany.DUCK: stan_duck(pole, pressed)
+		Stany.HOLE_PLACEMENT: stan_hole_placement(pole, pressed)
 	_prev_mouse_pressed = pressed
 
 func stan_idle(_pole: Vector2i, pressed: bool) -> void:
@@ -245,6 +259,11 @@ func stan_idle(_pole: Vector2i, pressed: bool) -> void:
 		var tiles_left := bialy_tiles if kolor_posuniecia == "b" else czarny_tiles
 		if tiles_left > 0:
 			stan = Stany.PLACEMENT
+			return
+	if Input.is_action_just_pressed("hole"):
+		var holes_left := bialy_holes if kolor_posuniecia == "b" else czarny_holes
+		if holes_left > 0:
+			stan = Stany.HOLE_PLACEMENT
 			return
 	if pressed and not _prev_mouse_pressed:
 		var figura = najechana_figura()
@@ -306,6 +325,20 @@ func stan_placement(pole: Vector2i, pressed: bool) -> void:
 			$dzwiek/zakaz.play()
 		stan = Stany.IDLE
 
+func stan_hole_placement(pole: Vector2i, pressed: bool) -> void:
+	if Input.is_action_just_pressed("hole"):
+		stan = Stany.IDLE
+		return
+	if pressed and not _prev_mouse_pressed:
+		if pole_na_planszy(pole) and stoi_figura(pole) == null and pole != duck_position:
+			_apply_hole(pole)
+			if NetworkManager.is_online:
+				NetworkManager.submit_action({"type": "hole", "x": pole.x, "y": pole.y})
+			$dzwiek/ruch.play()
+		else:
+			$dzwiek/zakaz.play()
+		stan = Stany.IDLE
+
 func stan_duck(pole: Vector2i, pressed: bool) -> void:
 	if NetworkManager.is_online and kolor_posuniecia != my_color:
 		return
@@ -332,10 +365,21 @@ func ruch(figura, cel: Vector2i, from_network := false) -> bool:
 	return true
 
 func _apply_move(figura, cel: Vector2i) -> void:
+	# Castling (both clients compute this identically and deterministically
+	# from the synced board state, so it never needs its own network
+	# message): detect it before figura actually moves, then move the
+	# matching rook to keep it in sync.
+	var pieces_before := _rules_pieces()
+	var king_index := GameRules.piece_index_at(pieces_before, pozycja(figura))
+	var castle := GameRules.find_castle_move(active_cards, pieces_before, dostepne_pola, king_index, cel, duck_position)
 	var captured = stoi_figura(cel)
 	if captured:
 		zbicie(captured)
 	figura.position = plansza.map_to_local(_view(cel))
+	if not castle.is_empty():
+		var rook_figure = stoi_figura(castle["rook_from"])
+		if rook_figure:
+			rook_figure.position = plansza.map_to_local(_view(castle["rook_to"]))
 	var mover := kolor_posuniecia
 	if moze_promowac(figura):
 		_begin_promotion(figura, mover)
@@ -405,6 +449,19 @@ func _apply_tile(pole: Vector2i) -> void:
 	else:
 		czarny_tiles -= 1
 
+# board_hole: the opposite of adding a tile - permanently removes a currently
+# playable, empty square from the board. Once removed it can never be added
+# back via dodaj_pole(), so it stays an indestructible obstacle for the rest
+# of the match.
+func _apply_hole(pole: Vector2i) -> void:
+	dostepne_pola.erase(pole)
+	holes.append(pole)
+	plansza.erase_cell(_view(pole))
+	if kolor_posuniecia == "b":
+		bialy_holes -= 1
+	else:
+		czarny_holes -= 1
+
 func _on_network_action(action: Dictionary) -> void:
 	match action.get("type", ""):
 		"coin_launch":
@@ -426,6 +483,10 @@ func _on_network_action(action: Dictionary) -> void:
 			var pole := Vector2i(int(action.get("x", -99)), int(action.get("y", -99)))
 			if kolor_posuniecia != my_color and not pole_na_planszy(pole) and pole_w_granicach(pole):
 				_apply_tile(pole)
+		"hole":
+			var hole_target := Vector2i(int(action.get("x", -99)), int(action.get("y", -99)))
+			if kolor_posuniecia != my_color and pole_na_planszy(hole_target) and stoi_figura(hole_target) == null and hole_target != duck_position:
+				_apply_hole(hole_target)
 		"duck":
 			var duck_target := Vector2i(int(action.get("x", -99)), int(action.get("y", -99)))
 			if kolor_posuniecia != my_color and duck_pending and _can_place_duck(duck_target):
@@ -492,7 +553,7 @@ func pozycja(figura) -> Vector2i:
 func _view(pole: Vector2i) -> Vector2i:
 	if not board_flipped:
 		return pole
-	return Vector2i(BOARD_MAX - pole.x, BOARD_MAX - pole.y)
+	return Vector2i(board_max - pole.x, board_max - pole.y)
 
 func dodaj(typ: String, kolor: String, pole: Vector2i) -> void:
 	if not pole_na_planszy(pole) or stoi_figura(pole):
@@ -515,13 +576,13 @@ func generacja_pol(rozmiar: int) -> void:
 			dostepne_pola.append(Vector2i(x, y))
 
 func pole_w_granicach(pole: Vector2i) -> bool:
-	return pole.x >= 0 and pole.x <= 7 and pole.y >= 0 and pole.y <= 7
+	return pole.x >= 0 and pole.x <= board_max and pole.y >= 0 and pole.y <= board_max
 
 func pole_na_planszy(pole: Vector2i) -> bool:
 	return pole in dostepne_pola
 
 func dodaj_pole(pole: Vector2i) -> void:
-	if not pole_w_granicach(pole) or pole_na_planszy(pole):
+	if not pole_w_granicach(pole) or pole_na_planszy(pole) or pole in holes:
 		return
 	plansza.set_cell(_view(pole), 0, _view(pole))
 	dostepne_pola.append(pole)
