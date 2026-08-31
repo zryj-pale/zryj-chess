@@ -15,6 +15,7 @@ func _init() -> void:
 		TestMultiKing.run(),
 		TestResolveStartPosition.run(),
 		TestCards.run(),
+		TestNewCards.run(),
 	]
 
 	var total_passed := 0

@@ -10,6 +10,13 @@ const CARDS := {
 	"indestructible_pawns": {"name": "Niezniszczalne piony", "description": "Wszystkie piony są nieruchome, nie atakują i nie mogą być bite.", "hooks": ["moves", "capture", "attacks"]},
 	"duck_chess": {"name": "Kacze szachy", "description": "Po ruchu figury ustaw kaczkę na wolnym polu.", "hooks": ["blocked_squares", "after_move"]},
 	"check_adds_tile": {"name": "Szach daje pole", "description": "Szach ostatniego króla przeciwnika daje dodatkowe pole.", "hooks": ["after_move"]},
+	"knight_swap": {"name": "Zamiana skoczkiem", "description": "Skoczek zamienia się miejscami z dowolną figurą (własną lub wroga) zamiast ją bić. Nie może dawać szacha ani wykonać zamiany, która szachowałaby własnego króla.", "hooks": ["moves", "capture", "attacks"]},
+	"bouncing_bishop": {"name": "Odbijający się goniec", "description": "Goniec odbija się od krawędzi planszy i od niezniszczalnych figur zamiast się zatrzymywać.", "hooks": ["moves"]},
+	"castling": {"name": "Roszada", "description": "Król i wieża tego samego koloru w jednej linii (bez figur między nimi) mogą się roszować w dowolnym momencie, bez limitu i bez względu na wcześniejsze ruchy.", "hooks": ["moves"]},
+	"double_step_pawns": {"name": "Piony na dwa pola", "description": "Piony mogą ruszać się o dwa pola do przodu przy każdym ruchu.", "hooks": ["moves"]},
+	"omni_pawns": {"name": "Wszechkierunkowe piony", "description": "Piony mogą ruszać się o jedno pole w dowolną stronę (góra/dół/lewo/prawo), ale nadal biją tylko po skosie do przodu.", "hooks": ["moves"]},
+	"board_hole": {"name": "Dziura w planszy", "description": "Na klawisz X zamieniasz jedno wolne pole w trwałą, niezniszczalną dziurę — przeciwieństwo dokładania pola. Masz jedną dziurę na mecz.", "hooks": ["blocked_squares"]},
+	"board_10x10": {"name": "Wielka plansza", "description": "Plansza może zostać rozszerzona aż do 10×10 zamiast standardowego 8×8.", "hooks": ["board_bounds"]},
 }
 
 static func all_ids() -> Array[String]:

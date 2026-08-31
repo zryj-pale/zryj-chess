@@ -63,3 +63,80 @@ static func stalemate_winner(cards: Dictionary, stalemated_color: String) -> Str
 	if stalled_has:
 		return stalemated_color
 	return ""
+
+## moves/capture: does this piece swap places with whatever it lands on -
+## friend or foe - instead of capturing (knight_swap)? Global like
+## indestructible_pawns: active for every knight once either player has it.
+static func piece_swaps_on_contact(cards: Dictionary, piece: Dictionary) -> bool:
+	return CardRegistry.any_has(cards, "knight_swap") and str(piece.get("type", "")) == "S"
+
+## attacks: does this piece never threaten a king, i.e. never contributes to
+## check (knight_swap: its knights can reposition freely but can't deliver
+## check)?
+static func piece_gives_no_check(cards: Dictionary, piece: Dictionary) -> bool:
+	return piece_swaps_on_contact(cards, piece)
+
+## moves: does the bishop bounce off board edges and indestructible pieces
+## instead of stopping there (bouncing_bishop)?
+static func bishop_bounces(cards: Dictionary) -> bool:
+	return CardRegistry.any_has(cards, "bouncing_bishop")
+
+## moves: castling options for the king at `king_index` (castling). No
+## move-history is tracked and there's no once-per-game limit: any king and
+## same-color rook sharing a row/column with at least one clear, unblocked
+## square between them can castle. The king ends up adjacent to the rook's
+## old square and the rook ends up adjacent to the king's old square, same
+## relative arrangement as standard chess, generalized to any distance.
+## Returns an Array of {rook_index, king_to, rook_to}.
+static func castle_options(cards: Dictionary, pieces: Array, board: Array[Vector2i], king_index: int, duck: Vector2i = Vector2i(-99, -99)) -> Array:
+	var options: Array = []
+	if not CardRegistry.any_has(cards, "castling"):
+		return options
+	if king_index < 0 or king_index >= pieces.size():
+		return options
+	var king: Dictionary = pieces[king_index]
+	if str(king["type"]) != "K":
+		return options
+	var color := str(king["color"])
+	var king_pos := Vector2i(int(king["x"]), int(king["y"]))
+	var directions: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for direction in directions:
+		var probe: Vector2i = king_pos + direction
+		var gap := 0
+		while probe in board:
+			if is_square_blocked(cards, probe, duck):
+				break
+			var occupant := GameRules.piece_index_at(pieces, probe)
+			if occupant != -1:
+				var occ: Dictionary = pieces[occupant]
+				if gap >= 1 and str(occ["type"]) == "W" and str(occ["color"]) == color:
+					options.append({
+						"rook_index": occupant,
+						"king_to": probe - direction,
+						"rook_to": king_pos + direction,
+					})
+				break
+			gap += 1
+			probe += direction
+	return options
+
+## moves: do pawns move one square in any of the 4 orthogonal directions
+## instead of just forward (omni_pawns)? Captures stay forward-diagonal only.
+static func pawns_move_omnidirectionally(cards: Dictionary) -> bool:
+	return CardRegistry.any_has(cards, "omni_pawns")
+
+## moves: can a pawn push two squares in whichever direction(s) it's
+## otherwise allowed to move (double_step_pawns)? Composable with
+## pawns_move_omnidirectionally - each is an independent modifier.
+static func pawns_can_double_step(cards: Dictionary) -> bool:
+	return CardRegistry.any_has(cards, "double_step_pawns")
+
+## How many permanent "holes" (board_hole) does `color` start the match with?
+## Per-owner, not global: only the player holding the card gets one.
+static func starting_holes(cards: Dictionary, color: String) -> int:
+	return 1 if CardRegistry.has(cards, color, "board_hole") else 0
+
+## The highest board coordinate either color's active card allows
+## (board_10x10 extends the normal 0..7 cap to 0..9).
+static func board_max(cards: Dictionary) -> int:
+	return 9 if CardRegistry.any_has(cards, "board_10x10") else 7
