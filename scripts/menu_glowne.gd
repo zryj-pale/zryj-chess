@@ -23,10 +23,11 @@ const SIGN_VIEW_FRACTION := 0.80
 # Where the column sits across the screen, 0 = hard left, 0.5 = centred. The
 # photo that used to fill the left of the menu is gone, so the entries move
 # into that space instead of sitting in the middle of it.
-const SIGN_ALIGN_X := 0.30
-# The same, vertically: 0.5 is centred, larger sits lower. The column is tall
-# enough now that centring it would run into the title across the top.
-const SIGN_ALIGN_Y := 0.56
+const SIGN_ALIGN_X := 0.20
+# The same, vertically: 0.5 is centred, larger sits lower. This only had to be
+# nudged off centre while the title ran across the top; the title has moved to
+# the corner, so the column gets the middle of the screen back.
+const SIGN_ALIGN_Y := 0.50
 const SIGN_EDGE_MARGIN := 0.35 # world units the longest word keeps clear of the left edge
 const SIGNS_Z_INDEX := 4 # above the animated background, below the intro video and the nickname field
 

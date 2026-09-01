@@ -180,7 +180,7 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 ### Gotowe lub częściowo gotowe
 
 - Projekt Godot 4.7 w trybie renderowania Mobile.
-- Menu, intro wideo i audio oraz wymagany, zapamiętywany nick gracza; pole nicku w prawym górnym rogu menu, chowane po zapisaniu.
+- Menu, intro wideo i audio oraz wymagany, zapamiętywany nick gracza. Prawy górny róg menu to logo „zryj pale ©", a pod nim pole nicku (chowane po zapisaniu); pozycje menu stoją przy lewej krawędzi. Logo zostaje na `z_index = 4`, żeby intro wideo (5) nadal je zakrywało przy starcie.
 - Pozycje menu głównego to wyciągnięte w 3D napisy z `assets/NAPISY 3D/` wiszące w powietrzu przed animowanym tłem, a nie zwykłe `Button`. Kolumna stoi po lewej stronie ekranu (`SIGN_ALIGN_X`), barwi się kolorem nicku (tym samym co tło), a każdy napis lewituje i **obraca się na wszystkich trzech osiach**.
 - Napisy się KOŁYSZĄ, nie obracają dookoła: `YAW`/`PITCH`/`ROLL` trzymają wychylenie znacznie poniżej ćwierć obrotu (maks. ~24°), więc słowo nigdy nie staje bokiem i zawsze jest zwrócone przodem do gracza. To ograniczenie jest celowe — nie podnoś tych stałych powyżej ok. 1,2 radiana. Tempa osi są wzajemnie niewymierne, żeby ruch nie układał się w jedno powtarzalne bujanie.
 - Najechanie myszą wygasza całą rotację do zera (mnożnik `1 - eased`), czyli ustawia napis równo przodem, a do tego podjeżdża on w stronę kamery i rozjaśnia się.
