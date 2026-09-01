@@ -11,13 +11,18 @@ extends Node3D
 # action, the same way the old Buttons owned their `pressed` signals.
 
 # The signs drift the way the board's plates do, just looser: these are hung
-# in mid-air rather than floating on water, so they swing a little more and
-# turn as they go.
-const BOB := 0.055 # +/- vertical travel
-const SWAY := 0.035 # +/- sideways travel
-const TURN := 0.075 # +/- yaw, radians (~4 degrees)
-const ROLL := 0.035 # +/- roll, radians (~2 degrees)
+# in mid-air rather than floating on water.
+const BOB := 0.075 # +/- vertical travel
+const SWAY := 0.05 # +/- sideways travel
+const ROLL := 0.05 # +/- roll, radians (~3 degrees)
+const PITCH := 0.04 # +/- pitch, radians (~2 degrees)
 const SPEED := 0.5
+# Each sign turns on its own axis, slowly and continuously - one full
+# revolution takes TAU / SPIN_RATE, about sixteen seconds. Hovering stops it
+# and swings the word round to face the player, which is what makes a spinning
+# menu usable: the entry you are pointing at is the one you can read.
+const SPIN_RATE := 0.4 # radians per second
+const SPIN_SETTLE := 6.0 # how fast a hovered sign turns back to face front
 
 # Hover: the sign steps toward the camera and brightens. HOVER_LERP is how
 # fast it gets there - high enough to feel like a button, slow enough that the
@@ -39,6 +44,7 @@ var hovered := false
 var on_pressed := Callable()
 var _phase := 0.0
 var _blend := 0.0 # 0 = resting, 1 = fully hovered
+var _spin := 0.0
 var _material: StandardMaterial3D
 var _model: Node3D
 var _size := Vector3.ONE # the word's own extent, before any hover scaling
@@ -56,6 +62,9 @@ var _size := Vector3.ONE # the word's own extent, before any hover scaling
 static func create(model_path: String, node_name: String, fallback_text: String, phase: float) -> MenuSign3D:
 	var entry := MenuSign3D.new()
 	entry._phase = phase
+	# Starting the spin at the phase too, so the column never turns in lockstep
+	# and there are always some entries facing the player.
+	entry._spin = phase
 	entry._material = _build_material()
 	var model := _load_model(model_path, node_name)
 	if model == null:
@@ -75,13 +84,17 @@ static func create(model_path: String, node_name: String, fallback_text: String,
 # real corners rather than a guessed box, so it tracks the drifting and the
 # hover step toward the camera.
 func hit_rect(camera: Camera3D) -> Rect2:
-	var half := _size * 0.5
+	var half := _size * 0.5 * scale
 	var rect := Rect2()
 	var first := true
 	for sx in [-1.0, 1.0]:
 		for sy in [-1.0, 1.0]:
 			for sz in [-1.0, 1.0]:
-				var corner := global_position + basis * Vector3(sx * half.x, sy * half.y, sz * half.z)
+				# Deliberately built WITHOUT the spin: a turning word is edge-on
+				# half the time, and a hit box that narrowed with it would be
+				# nearly unclickable exactly then. The resting footprint always
+				# covers what is drawn, so the error is on the forgiving side.
+				var corner := global_position + Vector3(sx * half.x, sy * half.y, sz * half.z)
 				# A corner behind the camera unprojects to nonsense; the menu
 				# camera never gets that close, but a bad rect would swallow
 				# clicks across the whole screen, so it is not worth risking.
@@ -108,11 +121,17 @@ func _process(delta: float) -> void:
 	var t := float(Time.get_ticks_msec()) / 1000.0 * SPEED + _phase
 	_blend = move_toward(_blend, 1.0 if hovered else 0.0, delta * HOVER_LERP)
 	var eased := _blend * _blend * (3.0 - 2.0 * _blend) # smoothstep, so the step in and out settles instead of stopping dead
+	if hovered:
+		# lerp_angle takes the short way round, so a sign caught mid-turn
+		# swings back the way it was already going rather than unwinding.
+		_spin = lerp_angle(_spin, 0.0, minf(1.0, delta * SPIN_SETTLE))
+	else:
+		_spin = wrapf(_spin + delta * SPIN_RATE, -PI, PI)
 	position = base_position + Vector3(
 		sin(t * 0.71) * SWAY,
 		sin(t) * BOB,
 		eased * HOVER_LIFT)
-	rotation = Vector3(0.0, sin(t * 0.83) * TURN, sin(t * 0.61) * ROLL)
+	rotation = Vector3(sin(t * 0.53) * PITCH, _spin, sin(t * 0.61) * ROLL)
 	scale = Vector3.ONE * lerpf(1.0, HOVER_SCALE, eased)
 	if _material != null:
 		_material.emission_energy_multiplier = lerpf(EMISSION_IDLE, EMISSION_HOVER, eased)

@@ -18,6 +18,11 @@ const SIGN_FOV := 45.0
 # title sits above it and the nickname field top-right, so it does not get the
 # entire screen.
 const SIGN_VIEW_FRACTION := 0.58
+# Where the column sits across the screen, 0 = hard left, 0.5 = centred. The
+# photo that used to fill the left of the menu is gone, so the entries move
+# into that space instead of sitting in the middle of it.
+const SIGN_ALIGN_X := 0.30
+const SIGN_EDGE_MARGIN := 0.35 # world units the longest word keeps clear of the left edge
 const SIGNS_Z_INDEX := 4 # above the animated background, below the intro video and the nickname field
 
 var tlo = null
@@ -113,9 +118,19 @@ func _frame_signs() -> void:
 		viewport_size = get_viewport_rect().size
 	# Camera3D keeps the vertical FOV, so the horizontal half-angle is the one
 	# that has to be derived from the aspect ratio.
+	var aspect := viewport_size.x / viewport_size.y
 	var tan_v := tan(deg_to_rad(SIGN_FOV) * 0.5) * SIGN_VIEW_FRACTION
-	var tan_h := tan_v * (viewport_size.x / viewport_size.y)
-	sign_camera.position = Vector3(0.0, 0.0, maxf(half_height / tan_v, half_width / tan_h))
+	var tan_h := tan_v * aspect
+	var distance := maxf(half_height / tan_v, half_width / tan_h)
+	# Sliding the CAMERA right is what moves the column left on screen. How far
+	# that is in world units depends on how much the camera actually sees at
+	# this distance, which is the full FOV, not the reduced framing one above.
+	var view_half_width := distance * tan(deg_to_rad(SIGN_FOV) * 0.5) * aspect
+	var shift := (0.5 - SIGN_ALIGN_X) * 2.0 * view_half_width
+	# On a narrow window there may not be room for the full shift; the longest
+	# word keeps its margin from the edge rather than running off it.
+	var room := maxf(0.0, view_half_width - half_width - SIGN_EDGE_MARGIN)
+	sign_camera.position = Vector3(minf(shift, room), 0.0, distance)
 	sign_camera.rotation = Vector3.ZERO
 
 func _process(_delta: float) -> void:
