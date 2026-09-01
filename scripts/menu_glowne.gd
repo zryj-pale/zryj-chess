@@ -38,6 +38,13 @@ var sign_camera: Camera3D
 var signs: Array[MenuSign3D] = []
 
 func _ready() -> void:
+	# This scene's own root Control fills the screen and, like any Control,
+	# defaults to MOUSE_FILTER_STOP - so it swallowed every click before it
+	# could reach _unhandled_input, where the signs are hit-tested, and none of
+	# them ever fired. It went unnoticed while the entries were Buttons,
+	# because a Button is itself a Control and caught its click first. The
+	# nickname field and label keep their own filters and still get theirs.
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tlo = TLO_EKRANU_GLOWNEGO.instantiate()
 	add_child(tlo)
 	_build_signs()
@@ -143,6 +150,10 @@ func _frame_signs() -> void:
 	var headroom := maxf(0.0, view_half_height - half_height)
 	sign_camera.position = Vector3(minf(shift, room), clampf(lift, -headroom, headroom), distance)
 	sign_camera.rotation = Vector3.ZERO
+	# Has to happen after the camera lands: how far each sign has to turn to
+	# face the player depends on where the camera ended up.
+	for item in signs:
+		item.aim_at(sign_camera.position)
 
 func _process(_delta: float) -> void:
 	var hovered = _sign_at(get_global_mouse_position()) if _signs_active() else null

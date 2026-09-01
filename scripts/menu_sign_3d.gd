@@ -43,6 +43,10 @@ const EMISSION_HOVER := 0.95
 const HIT_PADDING := Vector2(14.0, 10.0)
 
 var base_position := Vector3.ZERO
+# Where the sign points when it is not swinging - see aim_at(). Zero would
+# mean "square to the world", which is NOT the same as square to the player
+# once the column sits off to one side of a perspective camera.
+var base_rotation := Vector3.ZERO
 var hovered := false
 # What this sign does when clicked. The menu fills it in, exactly the way the
 # Buttons it replaced carried their own `pressed` connection.
@@ -107,6 +111,17 @@ func hit_rect(camera: Camera3D) -> Rect2:
 		return Rect2()
 	return rect.grow_individual(HIT_PADDING.x, HIT_PADDING.y, HIT_PADDING.x, HIT_PADDING.y)
 
+# Turns the sign to face the camera from wherever it hangs. The column sits
+# well over to the left of the screen, and a perspective camera looking
+# straight ahead sees anything off its axis from the side - so a sign whose
+# rotation is zero is square to the WORLD, not to the player, and reads as
+# turned away. Aiming it at the camera is what "facing the player" actually
+# means here, and the swing then happens either side of that.
+func aim_at(camera_position: Vector3) -> void:
+	var to_camera := camera_position - base_position
+	var flat := Vector2(to_camera.x, to_camera.z).length()
+	base_rotation = Vector3(-atan2(to_camera.y, flat), atan2(to_camera.x, to_camera.z), 0.0)
+
 # The word's own extent, so the menu can stack and frame the signs without
 # knowing anything about the models they came from.
 func word_size() -> Vector3:
@@ -128,8 +143,10 @@ func _process(delta: float) -> void:
 		eased * HOVER_LIFT)
 	# Fading the whole rotation out on hover squares the word up to the player
 	# without needing to chase an angle: at eased = 1 every axis is simply 0.
+	# Only the SWING fades out on hover; the aim stays, so a hovered sign
+	# settles square to the player rather than square to the world.
 	var turn := 1.0 - eased
-	rotation = Vector3(
+	rotation = base_rotation + Vector3(
 		sin(t * RATE_PITCH + _phase * 1.7) * PITCH * turn,
 		sin(t * RATE_YAW) * YAW * turn,
 		sin(t * RATE_ROLL + _phase * 2.3) * ROLL * turn)
