@@ -20,9 +20,9 @@ const SPEED := 0.5
 # close to edge-on and always keeps at least most of its face toward the
 # player. That bound is the whole point - it is what a full revolution cost,
 # and it is why these numbers must not grow past roughly 1.2 radians.
-const YAW := 0.60 # +/- radians (~34 degrees)
-const PITCH := 0.28 # +/- radians (~16 degrees)
-const ROLL := 0.22 # +/- radians (~13 degrees)
+const YAW := 0.42 # +/- radians (~24 degrees)
+const PITCH := 0.196 # +/- radians (~11 degrees)
+const ROLL := 0.154 # +/- radians (~9 degrees)
 # Mutually irrational-ish rates, so the three axes never line up into one
 # repeating rock and the motion keeps looking free.
 const RATE_YAW := 0.37

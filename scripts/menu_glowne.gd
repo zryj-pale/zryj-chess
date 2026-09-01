@@ -12,16 +12,21 @@ const TLO_EKRANU_GLOWNEGO = preload("uid://tvwbs626pujp")
 # the signs get their own world and are shown through a container that the 2D
 # title and nickname field can still layer over.
 const SIGNS_DIR := "res://assets/NAPISY 3D/przyciski 3d/"
-const SIGN_SPACING := 1.15 # world units between rows
+const SIGN_SPACING := 1.32 # world units between rows
 const SIGN_FOV := 45.0
-# How much of the viewport height the whole column is allowed to fill. The
-# title sits above it and the nickname field top-right, so it does not get the
-# entire screen.
-const SIGN_VIEW_FRACTION := 0.58
+# How much of the viewport height the whole column is allowed to fill. This is
+# the only lever on how BIG the words come out: the camera fits itself to the
+# column, so spacing the rows further apart on its own would just push the
+# camera back and shrink them. Raising the spacing and this together is what
+# keeps the words growing.
+const SIGN_VIEW_FRACTION := 0.80
 # Where the column sits across the screen, 0 = hard left, 0.5 = centred. The
 # photo that used to fill the left of the menu is gone, so the entries move
 # into that space instead of sitting in the middle of it.
 const SIGN_ALIGN_X := 0.30
+# The same, vertically: 0.5 is centred, larger sits lower. The column is tall
+# enough now that centring it would run into the title across the top.
+const SIGN_ALIGN_Y := 0.56
 const SIGN_EDGE_MARGIN := 0.35 # world units the longest word keeps clear of the left edge
 const SIGNS_Z_INDEX := 4 # above the animated background, below the intro video and the nickname field
 
@@ -130,7 +135,12 @@ func _frame_signs() -> void:
 	# On a narrow window there may not be room for the full shift; the longest
 	# word keeps its margin from the edge rather than running off it.
 	var room := maxf(0.0, view_half_width - half_width - SIGN_EDGE_MARGIN)
-	sign_camera.position = Vector3(minf(shift, room), 0.0, distance)
+	# Vertically the sign is the other way round, because screen Y counts down
+	# from the top: raising the camera drops the column down the screen.
+	var view_half_height := distance * tan(deg_to_rad(SIGN_FOV) * 0.5)
+	var lift := (SIGN_ALIGN_Y - 0.5) * 2.0 * view_half_height
+	var headroom := maxf(0.0, view_half_height - half_height)
+	sign_camera.position = Vector3(minf(shift, room), clampf(lift, -headroom, headroom), distance)
 	sign_camera.rotation = Vector3.ZERO
 
 func _process(_delta: float) -> void:
