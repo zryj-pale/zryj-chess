@@ -5,9 +5,6 @@ const TLO_EKRANU_GLOWNEGO = preload("uid://tvwbs626pujp")
 @onready var nickname_input: LineEdit = $NicknameInput
 @onready var nickname_status: Label = $NicknameStatus
 @onready var nickname_label: Label = $NicknameLabel
-@onready var options_button: Button = $OptionsButton
-@onready var options_panel: VBoxContainer = $OptionsPanel
-@onready var mute_music_check: CheckButton = $OptionsPanel/MuteMusic
 
 var tlo = null
 
@@ -19,18 +16,9 @@ func _ready() -> void:
 	nickname_input.text_submitted.connect(func(_text: String): _save_nickname())
 	nickname_label.mouse_filter = Control.MOUSE_FILTER_STOP
 	nickname_label.gui_input.connect(_on_nickname_label_input)
-	options_button.pressed.connect(_on_options_pressed)
-	mute_music_check.button_pressed = PozycjaOsobista.music_muted
-	mute_music_check.toggled.connect(_on_mute_music_toggled)
 	_refresh_nickname_visibility()
 	_refresh_background_tint()
 	$muzyka.play()
-
-func _on_options_pressed() -> void:
-	options_panel.visible = not options_panel.visible
-
-func _on_mute_music_toggled(muted: bool) -> void:
-	PozycjaOsobista.set_music_muted(muted)
 
 func _refresh_background_tint() -> void:
 	# Uses the live input text (not just the saved nickname) so the tint
@@ -52,7 +40,7 @@ func _on_nickname_label_input(event: InputEvent) -> void:
 		nickname_status.visible = true
 		nickname_input.grab_focus()
 
-func _on_robcza_pressed() -> void:
+func _on_lokalna_pressed() -> void:
 	if not _save_nickname():
 		return
 	if not PozycjaOsobista.any_loadout_has_king():
@@ -74,6 +62,15 @@ func _on_ustawianie_pressed() -> void:
 		return
 	get_tree().change_scene_to_file("res://scenes/ustawianie.tscn")
 
+
+# Music muting and the key map moved into the shared settings overlay, so
+# there is one place to change them from the menu, the army creator and
+# mid-match alike.
+func _on_ustawienia_pressed() -> void:
+	Ustawienia.open()
+
+func _on_wyjdz_pressed() -> void:
+	get_tree().quit()
 
 func _on_online_pressed() -> void:
 	if not _save_nickname():

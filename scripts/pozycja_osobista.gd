@@ -5,7 +5,18 @@ const PROFILE_SECTION := "player"
 const PROFILE_NICKNAME_KEY := "nickname"
 const PROFILE_MUSIC_MUTED_KEY := "music_muted"
 const PROFILE_LOADOUTS_KEY := "loadouts"
+const PROFILE_LEGAL_MOVES_KEY := "show_legal_moves"
+const PROFILE_KEYBINDS_KEY := "keybinds"
 const LOADOUT_COUNT := 2
+
+# Every action the player is allowed to rebind, in the order the settings
+# screen lists them. Anything not in here (the built-in ui_* actions) stays
+# fixed, so the player can never lock themselves out of the UI.
+const REMAPPABLE_ACTIONS := {
+	"space": "Dołóż pole",
+	"hole": "Wybij dziurę",
+	"pause": "Ustawienia / pauza",
+}
 
 # Two saved army+card loadouts. In local versus, white and black each pick
 # one before the coin toss (main.gd's loadout picker); online always uses
@@ -17,6 +28,13 @@ var loadouts: Array = []
 var editing_loadout_index := 0
 var nickname := ""
 var music_muted := false
+var show_legal_moves := true
+
+# action -> physical keycode. `defaults` is whatever project.godot shipped
+# with, captured before any saved override is applied, so "przywróć
+# domyślne" has something to go back to.
+var keybinds := {}
+var default_keybinds := {}
 
 # Transient hand-off to scenes/wynik.tscn - never persisted. main.gd fills
 # these in right before changing to that scene.
@@ -38,8 +56,10 @@ var wybrana_karta: String:
 
 func _ready() -> void:
 	_ensure_loadouts()
+	_capture_default_keybinds()
 	_load_profile()
 	_apply_music_mute()
+	_apply_keybinds()
 
 func _ensure_loadouts() -> void:
 	while loadouts.size() < LOADOUT_COUNT:
@@ -69,6 +89,62 @@ func any_loadout_has_king() -> bool:
 # done (leaving ustawianie.tscn or karty.tscn, switching slots).
 func save_loadouts() -> void:
 	_save_profile()
+
+func set_show_legal_moves(value: bool) -> void:
+	show_legal_moves = value
+	_save_profile()
+
+func _capture_default_keybinds() -> void:
+	for action in REMAPPABLE_ACTIONS:
+		default_keybinds[action] = _project_keycode(action)
+	keybinds = default_keybinds.duplicate()
+
+func _project_keycode(action: String) -> int:
+	if not InputMap.has_action(action):
+		return 0
+	for event in InputMap.action_get_events(action):
+		if event is InputEventKey:
+			# Physical keycodes are what the actions ship with, so the binding
+			# follows the key's position rather than the keyboard layout.
+			return event.physical_keycode if event.physical_keycode != 0 else event.keycode
+	return 0
+
+func _apply_keybinds() -> void:
+	for action in keybinds:
+		if not InputMap.has_action(action):
+			continue
+		var keycode := int(keybinds[action])
+		if keycode == 0:
+			continue
+		InputMap.action_erase_events(action)
+		var event := InputEventKey.new()
+		event.physical_keycode = keycode
+		InputMap.action_add_event(action, event)
+
+# Rebinding onto a key another action already uses SWAPS the two rather than
+# stealing it: that way no action is ever left without a key, which for
+# `pause` in particular would mean no way back into the settings screen.
+func set_keybind(action: String, keycode: int) -> void:
+	if keycode == 0 or not keybinds.has(action):
+		return
+	var previous := int(keybinds[action])
+	for other in keybinds.keys():
+		if other != action and int(keybinds[other]) == keycode:
+			keybinds[other] = previous
+	keybinds[action] = keycode
+	_apply_keybinds()
+	_save_profile()
+
+func reset_keybinds() -> void:
+	keybinds = default_keybinds.duplicate()
+	_apply_keybinds()
+	_save_profile()
+
+func keybind_label(action: String) -> String:
+	var keycode := int(keybinds.get(action, 0))
+	if keycode == 0:
+		return "—"
+	return OS.get_keycode_string(keycode)
 
 func set_music_muted(value: bool) -> void:
 	music_muted = value
@@ -110,6 +186,13 @@ func _load_profile() -> void:
 	if profile.load(PROFILE_PATH) == OK:
 		nickname = str(profile.get_value(PROFILE_SECTION, PROFILE_NICKNAME_KEY, "")).strip_edges()
 		music_muted = bool(profile.get_value(PROFILE_SECTION, PROFILE_MUSIC_MUTED_KEY, false))
+		show_legal_moves = bool(profile.get_value(PROFILE_SECTION, PROFILE_LEGAL_MOVES_KEY, true))
+		var saved_keybinds = profile.get_value(PROFILE_SECTION, PROFILE_KEYBINDS_KEY, {})
+		if saved_keybinds is Dictionary:
+			for action in keybinds.keys():
+				var keycode := int(saved_keybinds.get(action, 0))
+				if keycode != 0:
+					keybinds[action] = keycode
 		var saved_loadouts = profile.get_value(PROFILE_SECTION, PROFILE_LOADOUTS_KEY, [])
 		if saved_loadouts is Array:
 			for i in range(mini(saved_loadouts.size(), LOADOUT_COUNT)):
@@ -124,5 +207,7 @@ func _save_profile() -> void:
 	var profile := ConfigFile.new()
 	profile.set_value(PROFILE_SECTION, PROFILE_NICKNAME_KEY, nickname)
 	profile.set_value(PROFILE_SECTION, PROFILE_MUSIC_MUTED_KEY, music_muted)
+	profile.set_value(PROFILE_SECTION, PROFILE_LEGAL_MOVES_KEY, show_legal_moves)
+	profile.set_value(PROFILE_SECTION, PROFILE_KEYBINDS_KEY, keybinds)
 	profile.set_value(PROFILE_SECTION, PROFILE_LOADOUTS_KEY, loadouts)
 	profile.save(PROFILE_PATH)

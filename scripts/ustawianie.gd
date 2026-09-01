@@ -150,7 +150,13 @@ func _refresh_loadout_buttons() -> void:
 		loadout_buttons[i].button_pressed = i == PozycjaOsobista.editing_loadout_index
 
 func _process(_delta: float) -> void:
-	if dragging:
+	# The settings overlay sits above every scene and eats GUI clicks, but
+	# the drag itself follows the mouse from here, so it has to be dropped
+	# explicitly - otherwise a piece stays glued to the cursor behind the panel.
+	if Ustawienia.is_open():
+		if dragging:
+			_cancel_drag()
+	elif dragging:
 		var hit = _mouse_ground_point()
 		if hit != null:
 			var lifted: Vector3 = hit + Vector3(0.0, PIECE_Y, 0.0)

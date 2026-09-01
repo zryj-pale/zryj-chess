@@ -195,7 +195,11 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 - Serwer VPS wdrożony jako usługa systemd (`zryj-chess.service`, dedykowany użytkownik `chessserver`, `Restart=always`), odporna na błędnie sformatowane pakiety (w tym historyczny przypadek `GAME_PING` bez drugiego dwukropka) — zweryfikowane testem end-to-end protokołu z zewnętrznej sieci.
 - Testy jednostkowe silnika zasad w `tests/`, uruchamiane headlessowo bez otwierania edytora:
   `godot --headless --path . --script res://tests/run_tests.gd` (kod wyjścia = liczba nieudanych asercji).
-- Przycisk "Opcje" pod polem nicku z wyciszeniem muzyki (osobna szyna audio `Music`, nie wycisza efektów dźwiękowych), zapamiętywane w profilu gracza.
+- Wspólny ekran ustawień pod `Esc` (autoload `ustawienia.gd`, ta sama nakładka w menu, kreatorze armii, kolekcji kart i w trakcie meczu): wyciszenie muzyki (osobna szyna audio `Music`, nie wycisza efektów), przełącznik podświetlania legalnych ruchów, mapa klawiszy z pełnym przypisywaniem oraz wyjście z meczu. Wszystko zapamiętywane w profilu gracza.
+- Wyjście z trwającego meczu: lokalnie wraca do menu, online liczy się jako poddanie — przeciwnik dostaje normalny ekran wyniku zamiast czekać na ruch, który nigdy nie przyjdzie.
+- Przypisywanie klawiszy: akcje `space` (dołóż pole), `hole` (wybij dziurę) i `pause` (ustawienia) można przemapować; przypisanie na zajęty klawisz ZAMIENIA obie akcje, więc żadna nie zostaje bez klawisza. Wiązania idą po kodzie fizycznym, są zapisywane w `profile.cfg` i mają przycisk przywracania domyślnych.
+- Podświetlanie legalnych ruchów (opcjonalne, domyślnie włączone): trzymana lub zaznaczona figura pokazuje pola docelowe (niebieskie) i bicia (czerwone), a mechaniki kart — gdzie wolno dołożyć pole, wybić dziurę i postawić kaczkę (bursztynowe). Liczone tym samym `GameRules.is_legal_move()`, którym walidowany jest ruch, więc nie może się rozjechać z zasadami.
+- Menu główne z uporządkowaną kolumną przycisków (Lokalna gra / Gra online / Ustawianie pozycji / Ustawienia / Wyjdź z gry); zdjęcie „robcza” jest już tylko dekoracją, a nie ukrytym przyciskiem startu meczu.
 - Jeden przycisk dołączania online zamiast osobnych "host"/"dołącz" — rolę przydziela serwer wg kolejności dołączenia do kodu pokoju.
 - Widok planszy online zawsze pokazuje własną połowę gracza u dołu ekranu — gość ma obróconą o 180° kamerę, więc figury i pola stoją w prawdziwych, logicznych współrzędnych po obu stronach (bez lustrzanego przeliczania jak dawne `_view()`).
 - Wybór figury przy promocji pionka (hetman/wieża/goniec/skoczek) zamiast automatycznej promocji do hetmana.
@@ -238,9 +242,10 @@ Kolekcja kart nadal mieści się na jednej stronie (12 ≤ 16/stronę), więc pa
 | `karty.gd` | Paginowany ekran kolekcji kart (16/stronę, siatka 4×4, kafelki 3:4) z jawną opcją braku karty. |
 | `network_manager.gd` | Pokoje online, P2P hole punching, relay, niezawodne przesyłanie akcji, synchronizacja nicków, walidacja kompatybilności kart oraz przydzielanie roli host/gość wg kolejności dołączenia (serwer decyduje, nie klient). |
 | `lobby.gd` | Interfejs dołączania do pokoju jednym przyciskiem; zawsze wysyła pierwszy zapisany loadout. |
-| `pozycja_osobista.gd` | Autoload przechowujący dwa loadouty (układ + karta), profil nicku, wyciszenie muzyki i deterministyczny kolor gracza — wszystko trwale zapisywane w `profile.cfg`. |
+| `pozycja_osobista.gd` | Autoload przechowujący dwa loadouty (układ + karta), profil nicku, ustawienia (wyciszenie muzyki, podświetlanie ruchów, przypisania klawiszy) i deterministyczny kolor gracza — wszystko trwale zapisywane w `profile.cfg`. |
+| `ustawienia.gd` | Autoload z nakładką ustawień/pauzy nad każdą sceną: dźwięk, podświetlanie ruchów, mapa klawiszy, wyjście z meczu. Nie pauzuje drzewa (`NetworkManager` musi dalej działać) — sceny pollujące mysz pytają `Ustawienia.is_open()`. |
 | `figura.gd` | Prezentacja figury jako billboardu `Sprite3D`, typ, kolor i promocja (bez własnego hitboxa — trafienia liczy `stoi_figura()` po polu pod myszą). |
-| `hud.gd` | Liczniki dodatkowych pól i wizualizacja aktualnej tury. |
+| `hud.gd` | Liczniki dodatkowych pól i dziur (dziury tylko dla strony z kartą `board_hole`), nazwy stron oraz wyraźny wskaźnik tury w barwie nicku gracza. |
 | `rzut_moneta.gd`, `control.gd` | Zsynchronizowana, pełnoekranowa prezentacja rzutu monety 3D oraz przywracanie globalnych ustawień czasu/fizyki. |
 | `tlo_ekranu_glownego.gd` | Animowane tło menu/meczu; samo skaluje się do rzeczywistego rozmiaru okna i przyjmuje barwę od `main.gd`/`menu_glowne.gd`. |
 | `wynik.gd` | Placeholder ekranu wyniku po meczu; czyta dane z tymczasowych, nietrwałych pól w `PozycjaOsobista`. |

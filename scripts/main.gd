@@ -30,6 +30,14 @@ const PROMOTION_CHOICES := ["H", "W", "G", "S"]
 const PROMOTION_LABELS := {"H": "Hetman", "W": "Wieża", "G": "Goniec", "S": "Skoczek"}
 const CREAM_COLOR := Color8(255, 228, 196)
 const DARK_COLOR := Color8(0, 40, 10)
+# Green would be the chess convention, but the board's own dark squares are
+# green - these have to stay legible on BOTH the cream and the dark tile.
+const MOVE_HINT_COLOR := Color(0.2, 0.62, 1.0, 0.62)
+const CAPTURE_HINT_COLOR := Color(1.0, 0.25, 0.2, 0.66)
+const PLACE_HINT_COLOR := Color(1.0, 0.82, 0.2, 0.6)
+const HINT_Y := 0.02 # a hair above the tile plane, so the quad wins the depth test
+const HINT_SIZE := 0.88 # slightly inset, so neighbouring hints stay visually separate
+const HINT_KEY_STALE := "!stale" # sentinel _hint_signature() can never return
 
 var stan := Stany.IDLE
 var figury: Array = []
@@ -37,6 +45,14 @@ var dostepne_pola: Array[Vector2i] = []
 var tiles: Dictionary = {} # Vector2i -> MeshInstance3D, mirrors dostepne_pola visually
 var cream_material: StandardMaterial3D
 var dark_material: StandardMaterial3D
+var move_hint_material: StandardMaterial3D
+var capture_hint_material: StandardMaterial3D
+var place_hint_material: StandardMaterial3D
+var hints: Array[MeshInstance3D] = []
+# What the currently drawn hints describe. Recomputing legal targets means
+# running the rules engine once per candidate square, so it only happens when
+# this changes - not every frame.
+var _hint_key := ""
 var chwycona = null
 var wybrana = null
 var poczatkowe_pole := Vector2i.ZERO
@@ -137,6 +153,16 @@ func _init_tile_materials() -> void:
 	dark_material = StandardMaterial3D.new()
 	dark_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	dark_material.albedo_color = DARK_COLOR
+	move_hint_material = _hint_material(MOVE_HINT_COLOR)
+	capture_hint_material = _hint_material(CAPTURE_HINT_COLOR)
+	place_hint_material = _hint_material(PLACE_HINT_COLOR)
+
+func _hint_material(color: Color) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color = color
+	return material
 
 # Frames the camera so the whole active board (span ranges 8..10 depending on
 # board_10x10) fits inside the viewport, and rotates it 180 degrees for the
@@ -324,9 +350,20 @@ func _on_coin_finished() -> void:
 		$dzwiek/szach.play()
 
 func _process(_delta: float) -> void:
+	# Board input is polled from Input directly rather than read off events,
+	# so the settings overlay swallowing GUI clicks isn't enough - it has to
+	# be checked explicitly. A piece held mid-drag when the panel opens is
+	# put back on its own square instead of being left floating.
+	if Ustawienia.is_open():
+		if stan == Stany.GRAB:
+			_cancel_grab()
+		_update_hints()
+		return
 	if game_finished:
+		_update_hints()
 		return
 	if not input_enabled:
+		_update_hints()
 		return
 	var pole := _pole_pod_myszka()
 	var pressed := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
@@ -338,6 +375,29 @@ func _process(_delta: float) -> void:
 		Stany.DUCK: stan_duck(pole, pressed)
 		Stany.HOLE_PLACEMENT: stan_hole_placement(pole, pressed)
 	_prev_mouse_pressed = pressed
+	_update_hints()
+
+func _cancel_grab() -> void:
+	if chwycona:
+		chwycona.position = _piece_position(poczatkowe_pole)
+	chwycona = null
+	wybrana = null
+	stan = Stany.IDLE
+
+# Called from the settings overlay. Online this is a surrender rather than a
+# silent disconnect: the opponent is told they won, so they get the normal
+# result screen instead of waiting for a move that will never come. Locally
+# there is no winner to declare, so it just drops back to the menu.
+func opusc_mecz() -> void:
+	if game_finished:
+		return
+	if NetworkManager.is_online and not my_color.is_empty():
+		koniec_gry(GameRules.other_color(my_color))
+		return
+	game_finished = true
+	if NetworkManager.is_online:
+		NetworkManager.reset()
+	get_tree().change_scene_to_file("res://scenes/menu glowne.tscn")
 
 func stan_idle(pole: Vector2i, pressed: bool) -> void:
 	if duck_pending:
@@ -555,6 +615,7 @@ func _apply_hole(pole: Vector2i) -> void:
 	if tiles.has(pole):
 		tiles[pole].queue_free()
 		tiles.erase(pole)
+	_hint_key = HINT_KEY_STALE
 	if kolor_posuniecia == "b":
 		bialy_holes -= 1
 	else:
@@ -706,6 +767,112 @@ func _world_to_tile(point: Vector3) -> Vector2i:
 # inside it - see PIECE_Y.
 func _piece_position(pole: Vector2i) -> Vector3:
 	return _tile_to_world(pole) + Vector3(0.0, PIECE_Y, 0.0)
+
+# Legal-move hints (settings -> "Podświetlaj legalne ruchy"). Beyond ordinary
+# moves this also covers the card mechanics that are otherwise impossible to
+# guess at: where a new tile may be dropped, where a hole may be punched and
+# where the duck may stand.
+func odswiez_podpowiedzi() -> void:
+	_hint_key = HINT_KEY_STALE # force the next _update_hints() to rebuild
+	_update_hints()
+
+func _update_hints() -> void:
+	var key := _hint_signature()
+	if key == _hint_key:
+		return
+	_hint_key = key
+	_clear_hints()
+	match stan:
+		Stany.GRAB:
+			_draw_move_hints(chwycona, poczatkowe_pole)
+		Stany.SELECT:
+			_draw_move_hints(wybrana, pozycja(wybrana) if wybrana else Vector2i.ZERO)
+		Stany.PLACEMENT:
+			for pole in _tile_placement_targets():
+				_spawn_hint(pole, place_hint_material)
+		Stany.HOLE_PLACEMENT:
+			for pole in dostepne_pola:
+				if stoi_figura(pole) == null and pole != duck_position:
+					_spawn_hint(pole, capture_hint_material)
+		Stany.DUCK:
+			for pole in dostepne_pola:
+				if _can_place_duck(pole):
+					_spawn_hint(pole, place_hint_material)
+
+# Cheap stand-in for "would the hints look any different now?" - the board
+# can't change while any of these states is active, so the state plus the
+# square being asked about is enough to tell.
+func _hint_signature() -> String:
+	if not PozycjaOsobista.show_legal_moves or game_finished or not input_enabled:
+		return ""
+	match stan:
+		Stany.GRAB:
+			return "grab:%s" % poczatkowe_pole
+		Stany.SELECT:
+			if not wybrana:
+				return ""
+			return "select:%s" % pozycja(wybrana)
+		Stany.PLACEMENT:
+			return "tile:%d" % dostepne_pola.size()
+		Stany.HOLE_PLACEMENT:
+			return "hole:%d" % dostepne_pola.size()
+		Stany.DUCK:
+			return "duck:%s" % duck_position
+	return ""
+
+func _draw_move_hints(figura, from: Vector2i) -> void:
+	if not figura:
+		return
+	# The rules snapshot is built with the moved piece pinned to `from`, not
+	# to wherever it currently sits: while it's being dragged its node is
+	# under the cursor, which would otherwise poison every legality check.
+	var pieces: Array = []
+	var index := -1
+	for other in figury:
+		if other == figura:
+			index = pieces.size()
+			pieces.append({"type": str(other.typ), "color": str(other.kolor), "x": from.x, "y": from.y})
+		else:
+			var pole := pozycja(other)
+			pieces.append({"type": str(other.typ), "color": str(other.kolor), "x": pole.x, "y": pole.y})
+	if index == -1:
+		return
+	for cel in dostepne_pola:
+		if cel == from:
+			continue
+		if not GameRules.is_legal_move(pieces, dostepne_pola, index, cel, active_cards, duck_position):
+			continue
+		_spawn_hint(cel, capture_hint_material if _zajete_poza(cel, figura) else move_hint_material)
+
+func _zajete_poza(pole: Vector2i, ignorowana) -> bool:
+	for figura in figury:
+		if figura != ignorowana and pozycja(figura) == pole:
+			return true
+	return false
+
+func _tile_placement_targets() -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for x in range(board_min, board_max + 1):
+		for y in range(board_min, board_max + 1):
+			var pole := Vector2i(x, y)
+			if not pole_na_planszy(pole) and not (pole in holes):
+				result.append(pole)
+	return result
+
+func _spawn_hint(pole: Vector2i, material: StandardMaterial3D) -> void:
+	var mesh_instance := MeshInstance3D.new()
+	var mesh := PlaneMesh.new()
+	mesh.size = Vector2(HINT_SIZE, HINT_SIZE) * TILE_SIZE_3D
+	mesh_instance.mesh = mesh
+	mesh_instance.material_override = material
+	mesh_instance.position = _tile_to_world(pole) + Vector3(0.0, HINT_Y, 0.0)
+	board_root.add_child(mesh_instance)
+	hints.append(mesh_instance)
+
+func _clear_hints() -> void:
+	for hint in hints:
+		hint.queue_free()
+	hints.clear()
 
 func _create_duck_marker() -> void:
 	duck_marker = Sprite3D.new()
