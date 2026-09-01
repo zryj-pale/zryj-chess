@@ -43,46 +43,6 @@ theme_override_font_sizes/font_size = 40
 text = "zryj pale ©"
 horizontal_alignment = 1
 
-[node name="MenuButtons" type="VBoxContainer" parent="."]
-z_index = 4
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -130.0
-offset_top = -100.0
-offset_right = 130.0
-offset_bottom = 132.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/separation = 8
-
-[node name="LokalnaButton" type="Button" parent="MenuButtons"]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
-text = "Lokalna gra"
-
-[node name="OnlineButton" type="Button" parent="MenuButtons"]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
-text = "Gra online"
-
-[node name="UstawianieButton" type="Button" parent="MenuButtons"]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
-text = "Ustawianie pozycji"
-
-[node name="UstawieniaButton" type="Button" parent="MenuButtons"]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
-text = "Ustawienia"
-
-[node name="WyjdzButton" type="Button" parent="MenuButtons"]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
-text = "Wyjdź z gry"
-
 [node name="NicknameLabel" type="Label" parent="."]
 z_index = 6
 anchors_preset = 1
@@ -151,8 +111,3 @@ autoplay = true
 expand = true
 
 [connection signal="finished" from="VideoStreamPlayer" to="." method="_on_video_stream_player_finished"]
-[connection signal="pressed" from="MenuButtons/LokalnaButton" to="." method="_on_lokalna_pressed"]
-[connection signal="pressed" from="MenuButtons/OnlineButton" to="." method="_on_online_pressed"]
-[connection signal="pressed" from="MenuButtons/UstawianieButton" to="." method="_on_ustawianie_pressed"]
-[connection signal="pressed" from="MenuButtons/UstawieniaButton" to="." method="_on_ustawienia_pressed"]
-[connection signal="pressed" from="MenuButtons/WyjdzButton" to="." method="_on_wyjdz_pressed"]

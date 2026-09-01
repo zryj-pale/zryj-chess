@@ -66,12 +66,12 @@ func _ready() -> void:
 # is ever drawn. Size and place the container by hand instead (see
 # BOARD_AREA_TOP for why it is inset rather than fullscreen); its `stretch`
 # then keeps the SubViewport - and with it the Camera3D's aspect ratio -
-# matched to the container. BoardTile.fit_to_pixels() is what decides how big
+# matched to the container. Viewport3D.fit_to_pixels() is what decides how big
 # that actually is in pixels, and why it is not simply the 2D size.
 func _on_window_resized() -> void:
 	var viewport_size := get_viewport_rect().size
 	var height := maxf(1.0, minf(viewport_size.y, BOARD_AREA_BOTTOM) - BOARD_AREA_TOP)
-	BoardTile.fit_to_pixels(board_container, Rect2(0.0, BOARD_AREA_TOP, viewport_size.x, height))
+	Viewport3D.fit_to_pixels(board_container, Rect2(0.0, BOARD_AREA_TOP, viewport_size.x, height))
 	_center_camera()
 
 func _compute_board_bounds() -> void:
@@ -323,7 +323,7 @@ func _mouse_ground_point():
 	# from the outer 2D viewport has to be rebased onto it first - and it is
 	# not drawn at 1:1 either: it renders at real screen pixels and is scaled
 	# back down to fit the 2D layout, so undo that scale too
-	# (BoardTile.fit_to_pixels).
+	# (Viewport3D.fit_to_pixels).
 	var mouse := (get_viewport().get_mouse_position() - board_container.position) / board_container.scale
 	var origin := camera.project_ray_origin(mouse)
 	var dir := camera.project_ray_normal(mouse)

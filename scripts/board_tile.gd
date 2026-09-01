@@ -131,35 +131,8 @@ static func _phase(square: Vector2i, salt: float) -> float:
 
 # One-time setup of the viewport the board renders into. Call from _ready().
 static func setup_board(viewport: SubViewport, board_root: Node3D) -> void:
-	# The plates are hard-edged and permanently, slowly moving, so aliasing on
-	# them crawls. Nothing else in this viewport is geometry, so this is paid
-	# for the board alone.
-	viewport.msaa_3d = Viewport.MSAA_4X
+	Viewport3D.setup(viewport)
 	_add_lighting(board_root)
-
-# The 2D world is authored against a fixed 512-unit base and scaled up to the
-# window (window/stretch/mode = canvas_items). Text and controls come through
-# that sharp because they are re-rasterized at the real resolution. A
-# SubViewport does not: it is a texture, so sizing it in base units renders
-# the board at a fraction of the window's real resolution and leaves the
-# container to blow the result back up - which is why the plates looked like
-# you could count their pixels. The container is therefore sized in REAL
-# pixels and scaled back down by the same factor: same area of screen, one
-# board pixel per screen pixel.
-#
-# `canvas_rect` is where the board should sit, in the 2D units the rest of the
-# scene is laid out in. Mouse math has to divide by the container's scale to
-# get back into the viewport's pixels - see _mouse_ground_point().
-static func fit_to_pixels(container: SubViewportContainer, canvas_rect: Rect2) -> void:
-	var canvas := container.get_viewport_rect().size
-	var pixels := Vector2(container.get_window().size)
-	var factor := 1.0
-	# aspect = expand keeps the scale uniform, so one axis is enough.
-	if canvas.x > 0.0 and pixels.x > 0.0:
-		factor = pixels.x / canvas.x
-	container.position = canvas_rect.position
-	container.scale = Vector2.ONE / factor
-	container.size = canvas_rect.size * factor
 
 # The board's SubViewport renders its own world and starts out with no lights
 # at all, which is why every other 3D thing in it (piece billboards, hints,

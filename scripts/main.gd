@@ -137,10 +137,10 @@ func _center_screen_control(control: Control, size: Vector2) -> void:
 # is ever drawn - the same trap _center_screen_control() works around for the
 # runtime-built pickers. Size the container by hand instead; its `stretch`
 # then keeps the SubViewport (and with it the Camera3D's aspect ratio) matched
-# to the container. BoardTile.fit_to_pixels() is what decides how big that
+# to the container. Viewport3D.fit_to_pixels() is what decides how big that
 # actually is in pixels, and why it is not simply the 2D size.
 func _on_window_resized() -> void:
-	BoardTile.fit_to_pixels(board_container, Rect2(Vector2.ZERO, get_viewport_rect().size))
+	Viewport3D.fit_to_pixels(board_container, Rect2(Vector2.ZERO, get_viewport_rect().size))
 	_center_camera()
 
 func _init_tile_materials() -> void:
@@ -745,7 +745,7 @@ func _spawn_tile(pole: Vector2i) -> void:
 func _mouse_ground_point():
 	# Rebase onto the board's own viewport, which need not start at (0, 0) and
 	# is not drawn at 1:1 - it renders at real screen pixels and is scaled back
-	# down to fit the 2D layout, so undo that scale too (BoardTile.fit_to_pixels).
+	# down to fit the 2D layout, so undo that scale too (Viewport3D.fit_to_pixels).
 	var mouse := (get_viewport().get_mouse_position() - board_container.position) / board_container.scale
 	var origin := camera.project_ray_origin(mouse)
 	var dir := camera.project_ray_normal(mouse)

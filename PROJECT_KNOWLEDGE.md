@@ -181,6 +181,7 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 
 - Projekt Godot 4.7 w trybie renderowania Mobile.
 - Menu, intro wideo i audio oraz wymagany, zapamiętywany nick gracza; pole nicku w prawym górnym rogu menu, chowane po zapisaniu.
+- Pozycje menu głównego to wyciągnięte w 3D napisy z `assets/NAPISY 3D/` wiszące w powietrzu przed animowanym tłem, a nie zwykłe `Button`. Kołyszą się powoli, barwią kolorem nicku (tym samym co tło) i po najechaniu myszą podjeżdżają w stronę kamery oraz rozjaśniają się. Trafienia liczone są ręcznie — prostokąt każdego napisu jest rzutowany na ekran przez `unproject_position()`, więc śledzi kołysanie i najechanie. Uwaga: menu straciło przez to nawigację klawiaturą, którą dawały `Button`y.
 - Pełny ekran bez rozciągania interfejsu: `window/stretch/mode=canvas_items` + `aspect=expand` — przyciski i HUD mają natywny rozmiar, animowane tło (`tlo_ekranu_glownego.gd`) samo skaluje się do rozmiaru okna, a plansza jest kadrowana kamerą tak, by zawsze mieściła się w oknie (`_center_camera()`). Intro wideo zostaje w oryginalnym, wyśrodkowanym kwadracie 512×512 z czarnym tłem widocznym tylko podczas jego odtwarzania.
 - Kreator neutralnego ustawienia figur z budżetem punktowym.
 - Plansza i figury w 3D w stylu starych gier: pola to teksturowane płytki z modelu `assets/POLA/pole.glb`, a figury to billboardy `Sprite3D` zawsze zwrócone do kamery, ustawionej pod stałym kątem. Cała reszta gry pozostaje 2D — szczegóły w sekcji 9.
@@ -252,6 +253,8 @@ Kolekcja kart nadal mieści się na jednej stronie (12 ≤ 16/stronę), więc pa
 | `ustawienia.gd` | Autoload z nakładką ustawień/pauzy nad każdą sceną: dźwięk, podświetlanie ruchów, mapa klawiszy, wyjście z meczu. Nie pauzuje drzewa (`NetworkManager` musi dalej działać) — sceny pollujące mysz pytają `Ustawienia.is_open()`. |
 | `figura.gd` | Prezentacja figury jako billboardu `Sprite3D`, typ, kolor i promocja (bez własnego hitboxa — trafienia liczy `stoi_figura()` po polu pod myszą). |
 | `board_tile.gd` | Klasa `BoardTile`: jedno pole planszy z modelu `pole.glb` (materiały, normalizacja rozmiaru modelu, oświetlenie planszy) wraz z animacją lewitacji. Wspólna dla meczu i kreatora armii. |
+| `menu_sign_3d.gd` | Klasa `MenuSign3D`: jedna pozycja menu jako wiszący napis 3D — wczytanie modelu, wyśrodkowanie na własnym bounding boksie, materiał, kołysanie, stan najechania i rzutowany na ekran prostokąt trafień. Gdy model jest pusty lub go brak, buduje zastępczy `TextMesh`. |
+| `viewport_3d.gd` | Klasa `Viewport3D`: wspólna obsługa treści 3D wstawianej w sceny 2D — antyaliasing oraz `fit_to_pixels()` wymiarujące `SubViewport` w prawdziwych pikselach zamiast w jednostkach układu 2D. Używane przez obie plansze i menu. |
 | `hud.gd` | Liczniki dodatkowych pól i dziur (dziury tylko dla strony z kartą `board_hole`), nazwy stron oraz wyraźny wskaźnik tury w barwie nicku gracza. |
 | `rzut_moneta.gd`, `control.gd` | Zsynchronizowana, pełnoekranowa prezentacja rzutu monety 3D oraz przywracanie globalnych ustawień czasu/fizyki. |
 | `tlo_ekranu_glownego.gd` | Animowane tło menu/meczu; samo skaluje się do rzeczywistego rozmiaru okna i przyjmuje barwę od `main.gd`/`menu_glowne.gd`. |
