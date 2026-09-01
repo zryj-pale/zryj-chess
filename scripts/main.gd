@@ -107,7 +107,7 @@ func _ready() -> void:
 		NetworkManager.player_disconnected.connect(_on_player_disconnected)
 		ustawienie_z_pozycji(NetworkManager.white_pieces, NetworkManager.black_pieces)
 		_refresh_player_colors()
-		_refresh_background_tint()
+		_refresh_match_tint()
 		start_online_match()
 	else:
 		_show_loadout_picker()
@@ -164,6 +164,7 @@ func _center_camera() -> void:
 	camera_rig.position = Vector3(center, 0.0, center) * TILE_SIZE_3D
 	camera_rig.rotation = Vector3(0.0, PI if board_flipped else 0.0, 0.0)
 	var half := (board_max - board_min + 1) * TILE_SIZE_3D * 0.5
+	BoardTile.focus_lighting(board_root, Vector3(center, 0.0, center) * TILE_SIZE_3D, half)
 	_place_camera(half, half)
 
 # Pulls the camera back along its fixed tilt until every corner of the board
@@ -211,15 +212,20 @@ func _refresh_player_colors() -> void:
 		"c": PozycjaOsobista.nickname_color(str(player_nicknames.get("c", "")))
 	}
 
-func _refresh_background_tint() -> void:
-	if not match_background:
-		return
+# The blend of the two players' colours, weighted by how much material each
+# still has on the board. It tints the animated background AND the board's own
+# lights, so the two read as one scene rather than a grey board sitting on a
+# coloured backdrop - and losing material visibly drains the board of your
+# colour.
+func _refresh_match_tint() -> void:
 	var white_points := _material_points("b")
 	var black_points := _material_points("c")
 	var total := white_points + black_points
 	var black_weight := 0.5 if total == 0 else float(black_points) / float(total)
 	var tint: Color = player_colors["b"].lerp(player_colors["c"], black_weight)
-	match_background.set_match_tint(tint)
+	BoardTile.tint_lighting(board_root, tint)
+	if match_background:
+		match_background.set_match_tint(tint)
 
 func _material_points(color: String) -> int:
 	var total := 0
@@ -308,7 +314,7 @@ func _begin_local_match(white_index: int, black_index: int) -> void:
 	for piece in black_loadout.get("ustawienie", []):
 		dodaj(str(piece[0]), "c", Vector2i(piece[1].x, 7 - piece[1].y))
 	_refresh_player_colors()
-	_refresh_background_tint()
+	_refresh_match_tint()
 	start_local_match()
 
 func start_local_match() -> void:
@@ -559,7 +565,7 @@ func _on_promotion_chosen(piece_type: String) -> void:
 	_continue_after_move(kolor_posuniecia)
 
 func _continue_after_move(mover: String) -> void:
-	_refresh_background_tint()
+	_refresh_match_tint()
 	$dzwiek/ruch.play()
 	var winner := CardHooks.win_condition_winner(active_cards, _rules_pieces(), dostepne_pola, mover)
 	if not winner.is_empty():

@@ -18,8 +18,10 @@ const TEXTURE_DARK := preload("res://assets/POLA/pole_czarne.jpg")
 
 # Tiles no longer meet edge to edge: they are separate floating plates, so
 # each one is inset inside its cell. The gap doubles as the headroom the
-# sideways drift needs - without it neighbouring plates would intersect.
-const TILE_FILL := 0.94
+# sideways drift needs - without it neighbouring plates would intersect, so
+# raising this means lowering LEV_DRIFT. At 0.97 the gap is 0.03 of a cell
+# and two neighbours drifting toward each other close at most 0.018 of it.
+const TILE_FILL := 0.97
 
 # Levitation: every plate drifts along its own slow, endless loop, as if the
 # board were floating on water. Amplitudes are in cell units and deliberately
@@ -28,9 +30,9 @@ const TILE_FILL := 0.94
 # wander far enough from its cell for the two to visibly disagree.
 const LEVITATION := true
 const LEV_SPEED := 0.42 # global rate; one full bob takes about 15s at 0.42
-const LEV_RISE := 0.035 # +/- vertical travel
-const LEV_DRIFT := 0.016 # +/- sideways travel
-const LEV_TILT := 0.028 # +/- rocking, in radians (~1.6 degrees)
+const LEV_RISE := 0.022 # +/- vertical travel
+const LEV_DRIFT := 0.009 # +/- sideways travel
+const LEV_TILT := 0.018 # +/- rocking, in radians (~1 degree)
 # Per-axis rates, kept mutually irrational-ish so a plate's motion never
 # settles into a short repeating loop and neighbours never sync up.
 const RATE_RISE := 1.0
@@ -38,6 +40,27 @@ const RATE_DRIFT_X := 0.73
 const RATE_DRIFT_Z := 0.61
 const RATE_TILT_X := 0.83
 const RATE_TILT_Z := 0.67
+
+# Board lighting. Two directionals give the plates their shape (without them
+# the bevel and the sides read exactly as bright as the top); the lamp is a
+# point light hung over the middle of the board, and it is what makes one
+# plate brighter than another instead of the whole board being evenly washed.
+# Plates riding high on their levitation come nearer to it and pick up a
+# little more light, which is free and reads nicely.
+const KEY_LIGHT := "BoardKeyLight"
+const FILL_LIGHT := "BoardFillLight"
+const LAMP := "BoardLamp"
+const KEY_ENERGY := 0.16
+const FILL_ENERGY := 0.12
+const LAMP_ENERGY := 1.0
+const LAMP_HEIGHT := 0.65 # how high the lamp hangs, in board half-spans
+const LAMP_REACH := 2.7 # lamp range, in multiples of that height
+# How far each light is dragged from white toward the two players' mixed
+# colour. Nickname colours are strongly saturated, so lighting the board with
+# them neat would drown the plates' own texture - the lamp carries most of the
+# tint because that is where the light actually pools.
+const LAMP_TINT := 0.55
+const KEY_TINT := 0.22
 
 static var _mesh: Mesh = null
 # The model normalized to a 1.0-wide cell: the scale that gets it there, plus
@@ -140,31 +163,65 @@ static func fit_to_pixels(container: SubViewportContainer, canvas_rect: Rect2) -
 
 # The board's SubViewport renders its own world and starts out with no lights
 # at all, which is why every other 3D thing in it (piece billboards, hints,
-# the duck) is unshaded. Flat-lit plates would waste the model - the bevel and
-# the sides would read exactly as bright as the top - so the two lights the
-# tiles need are added here. Nothing else in the viewport is shaded, so they
-# affect the tiles and only the tiles.
+# the duck) is unshaded. Flat-lit plates would waste the model, so the lights
+# the tiles need are added here. Nothing else in the viewport is shaded, so
+# they affect the tiles and only the tiles.
 #
 # There is deliberately no WorldEnvironment: the board viewport is transparent
 # so the animated 2D background shows through behind it, and an environment
 # would paint over that. The ambient term that keeps the plates' shaded sides
 # off pure black comes from the material's own emission instead.
 static func _add_lighting(board_root: Node3D) -> void:
-	if board_root.has_node("BoardKeyLight"):
+	if board_root.has_node(KEY_LIGHT):
 		return
 	var key := DirectionalLight3D.new()
-	key.name = "BoardKeyLight"
+	key.name = KEY_LIGHT
 	key.rotation_degrees = Vector3(-52.0, -34.0, 0.0)
-	key.light_energy = 0.92
+	key.light_energy = KEY_ENERGY
 	key.shadow_enabled = false
 	board_root.add_child(key)
 	var fill := DirectionalLight3D.new()
-	fill.name = "BoardFillLight"
+	fill.name = FILL_LIGHT
 	fill.rotation_degrees = Vector3(-18.0, 146.0, 0.0)
-	fill.light_energy = 0.38
+	fill.light_energy = FILL_ENERGY
 	fill.light_color = Color(0.84, 0.88, 1.0)
 	fill.shadow_enabled = false
 	board_root.add_child(fill)
+	var lamp := OmniLight3D.new()
+	lamp.name = LAMP
+	lamp.light_energy = LAMP_ENERGY
+	lamp.shadow_enabled = false
+	# Attenuation 0 turns off the physical 1/d^2 term and leaves only the
+	# range window, which is what makes the falloff across the board something
+	# that can be aimed by hand rather than something that collapses into a
+	# hotspot over the middle four squares.
+	lamp.omni_attenuation = 0.0
+	board_root.add_child(lamp)
+
+# Hangs the lamp over the middle of the board. `half_span` is the board's
+# half-width in world units, so the pool of light keeps the same shape
+# relative to the board whether it is 8x8 or grown to 10x10 by a card.
+static func focus_lighting(board_root: Node3D, center: Vector3, half_span: float) -> void:
+	var lamp := board_root.get_node_or_null(LAMP) as OmniLight3D
+	if lamp == null:
+		return
+	var height := maxf(half_span, 1.0) * LAMP_HEIGHT
+	lamp.position = center + Vector3(0.0, height, 0.0)
+	lamp.omni_range = height * LAMP_REACH
+
+# Colours the board with the two players' mixed colour - the same mix the
+# animated background behind it is tinted with, so board and background read
+# as one scene. The mix arrives at whatever brightness the nickname hash
+# produced; only its hue and saturation are wanted here, since how BRIGHT the
+# board is has already been decided by the light energies above.
+static func tint_lighting(board_root: Node3D, tint: Color) -> void:
+	var hue := Color.from_hsv(tint.h, tint.s, 1.0)
+	var key := board_root.get_node_or_null(KEY_LIGHT) as DirectionalLight3D
+	if key != null:
+		key.light_color = Color.WHITE.lerp(hue, KEY_TINT)
+	var lamp := board_root.get_node_or_null(LAMP) as OmniLight3D
+	if lamp != null:
+		lamp.light_color = Color.WHITE.lerp(hue, LAMP_TINT)
 
 static func _material(light: bool) -> StandardMaterial3D:
 	if _materials.has(light):
@@ -191,7 +248,7 @@ static func _material(light: bool) -> StandardMaterial3D:
 	material.emission_enabled = true
 	material.emission = Color.WHITE
 	material.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
-	material.emission_energy_multiplier = 0.2
+	material.emission_energy_multiplier = 0.08
 	material.emission_texture = material.albedo_texture
 	_materials[light] = material
 	return material

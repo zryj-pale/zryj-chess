@@ -90,7 +90,12 @@ func _compute_board_bounds() -> void:
 func _center_camera() -> void:
 	var center := Vector2((board_min_v.x + board_max_v.x) / 2.0, (board_min_v.y + board_max_v.y) / 2.0)
 	camera_rig.position = Vector3(center.x, 0.0, center.y) * TILE_SIZE_3D
-	_place_camera((board_max_v.x - board_min_v.x + 1) * TILE_SIZE_3D * 0.5, (board_max_v.y - board_min_v.y + 1) * TILE_SIZE_3D * 0.5)
+	var half_x := (board_max_v.x - board_min_v.x + 1) * TILE_SIZE_3D * 0.5
+	var half_z := (board_max_v.y - board_min_v.y + 1) * TILE_SIZE_3D * 0.5
+	# No player colours to mix on this screen - the army creator is neutral -
+	# so the lamp keeps its default white.
+	BoardTile.focus_lighting(board_root, Vector3(center.x, 0.0, center.y) * TILE_SIZE_3D, maxf(half_x, half_z))
+	_place_camera(half_x, half_z)
 
 # Pulls the camera back along its fixed tilt until every corner of the board
 # - and the top of a piece standing on it - is inside the frustum. The
