@@ -85,7 +85,7 @@ func _ready() -> void:
 	add_to_group("game_main")
 	_add_menu_background()
 	_init_tile_materials()
-	BoardTile.add_lighting(board_root)
+	BoardTile.setup_board(board_viewport, board_root)
 	generacja_pol(6)
 	_on_window_resized()
 	get_viewport().size_changed.connect(_on_window_resized)
@@ -136,12 +136,11 @@ func _center_screen_control(control: Control, size: Vector2) -> void:
 # rect" anchors silently collapse the container to 0x0 and none of the board
 # is ever drawn - the same trap _center_screen_control() works around for the
 # runtime-built pickers. Size the container by hand instead; its `stretch`
-# then keeps the SubViewport (and with it the Camera3D's aspect ratio and
-# ray-casts) matched to the real window 1:1, so mouse-position math done in
-# the outer 2D viewport maps straight onto the board.
+# then keeps the SubViewport (and with it the Camera3D's aspect ratio) matched
+# to the container. BoardTile.fit_to_pixels() is what decides how big that
+# actually is in pixels, and why it is not simply the 2D size.
 func _on_window_resized() -> void:
-	board_container.position = Vector2.ZERO
-	board_container.size = get_viewport_rect().size
+	BoardTile.fit_to_pixels(board_container, Rect2(Vector2.ZERO, get_viewport_rect().size))
 	_center_camera()
 
 func _init_tile_materials() -> void:
@@ -738,8 +737,10 @@ func _spawn_tile(pole: Vector2i) -> void:
 # ground plane (y=0) and returns the world hit point, or null if the ray
 # never crosses it (shouldn't happen with a downward-tilted camera).
 func _mouse_ground_point():
-	# Rebase onto the board's own viewport, which need not start at (0, 0).
-	var mouse := get_viewport().get_mouse_position() - board_container.position
+	# Rebase onto the board's own viewport, which need not start at (0, 0) and
+	# is not drawn at 1:1 - it renders at real screen pixels and is scaled back
+	# down to fit the 2D layout, so undo that scale too (BoardTile.fit_to_pixels).
+	var mouse := (get_viewport().get_mouse_position() - board_container.position) / board_container.scale
 	var origin := camera.project_ray_origin(mouse)
 	var dir := camera.project_ray_normal(mouse)
 	return Plane(Vector3.UP, 0.0).intersects_ray(origin, dir)

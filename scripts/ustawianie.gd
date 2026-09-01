@@ -48,7 +48,7 @@ var drag_origin := Vector2i.ZERO
 var drag_moved := false
 
 func _ready() -> void:
-	BoardTile.add_lighting(board_root)
+	BoardTile.setup_board(board_viewport, board_root)
 	generacja_pol(1, 4, 6, 6)
 	_compute_board_bounds()
 	for pole in dostepne_pola:
@@ -65,12 +65,13 @@ func _ready() -> void:
 # rect" anchors silently collapse the container to 0x0 and none of the board
 # is ever drawn. Size and place the container by hand instead (see
 # BOARD_AREA_TOP for why it is inset rather than fullscreen); its `stretch`
-# then keeps the SubViewport - and with it the Camera3D's aspect ratio and
-# ray-casts - matched to that rect 1:1.
+# then keeps the SubViewport - and with it the Camera3D's aspect ratio -
+# matched to the container. BoardTile.fit_to_pixels() is what decides how big
+# that actually is in pixels, and why it is not simply the 2D size.
 func _on_window_resized() -> void:
 	var viewport_size := get_viewport_rect().size
-	board_container.position = Vector2(0.0, BOARD_AREA_TOP)
-	board_container.size = Vector2(viewport_size.x, maxf(1.0, minf(viewport_size.y, BOARD_AREA_BOTTOM) - BOARD_AREA_TOP))
+	var height := maxf(1.0, minf(viewport_size.y, BOARD_AREA_BOTTOM) - BOARD_AREA_TOP)
+	BoardTile.fit_to_pixels(board_container, Rect2(0.0, BOARD_AREA_TOP, viewport_size.x, height))
 	_center_camera()
 
 func _compute_board_bounds() -> void:
@@ -313,9 +314,12 @@ func _levitation_at(pole: Vector2i) -> Vector3:
 	return tile.levitation_offset() if tile != null else Vector3.ZERO
 
 func _mouse_ground_point():
-	# The board's viewport is inset inside the window, so a mouse position
-	# read from the outer 2D viewport has to be rebased onto it first.
-	var mouse := get_viewport().get_mouse_position() - board_container.position
+	# The board's viewport is inset inside the window, so a mouse position read
+	# from the outer 2D viewport has to be rebased onto it first - and it is
+	# not drawn at 1:1 either: it renders at real screen pixels and is scaled
+	# back down to fit the 2D layout, so undo that scale too
+	# (BoardTile.fit_to_pixels).
+	var mouse := (get_viewport().get_mouse_position() - board_container.position) / board_container.scale
 	var origin := camera.project_ray_origin(mouse)
 	var dir := camera.project_ray_normal(mouse)
 	return Plane(Vector3.UP, 0.0).intersects_ray(origin, dir)
