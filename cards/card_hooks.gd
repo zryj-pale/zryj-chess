@@ -136,7 +136,12 @@ static func pawns_can_double_step(cards: Dictionary) -> bool:
 static func starting_holes(cards: Dictionary, color: String) -> int:
 	return 1 if CardRegistry.has(cards, color, "board_hole") else 0
 
-## The highest board coordinate either color's active card allows
-## (board_10x10 extends the normal 0..7 cap to 0..9).
+## The board's coordinate range is centered on the fixed 1..6 starting
+## squares and grows symmetrically: 0..7 by default (one extra ring on each
+## side, 8x8 total), or -1..8 with board_10x10 (two extra rings on each
+## side, 10x10 total).
+static func board_min(cards: Dictionary) -> int:
+	return -1 if CardRegistry.any_has(cards, "board_10x10") else 0
+
 static func board_max(cards: Dictionary) -> int:
-	return 9 if CardRegistry.any_has(cards, "board_10x10") else 7
+	return 8 if CardRegistry.any_has(cards, "board_10x10") else 7

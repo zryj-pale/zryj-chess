@@ -1,8 +1,25 @@
 extends Node2D
 
-@onready var plansza: TileMapLayer = $BoardRoot/TileMapLayer
-@onready var board_root: Node2D = $BoardRoot
-const TILE_SIZE := 64
+# The board is 3D content, but everything else in this scene (HUD, the
+# animated menu background, the promotion/loadout pickers) is plain 2D and
+# needs to stay layerable with z_index the normal way - 2D CanvasItems always
+# draw on top of ANY 3D World content in a shared viewport, with no way to
+# put one "behind" the other. So the 3D board lives inside its own
+# SubViewport, displayed through a fullscreen SubViewportContainer, which is
+# itself just an ordinary CanvasItem the 2D background/HUD can layer against.
+@onready var board_container: SubViewportContainer = $BoardViewportContainer
+@onready var board_viewport: SubViewport = $BoardViewportContainer/BoardViewport
+@onready var board_root: Node3D = $BoardViewportContainer/BoardViewport/BoardRoot
+@onready var camera_rig: Node3D = $BoardViewportContainer/BoardViewport/CameraRig
+@onready var camera: Camera3D = $BoardViewportContainer/BoardViewport/CameraRig/Camera3D
+
+const TILE_SIZE_3D := 1.0
+const PIECE_Y := TILE_SIZE_3D * 0.5 # lifts pieces/marker so they stand on the tile plane instead of poking through it
+const PIECE_HEIGHT := TILE_SIZE_3D # a billboard piece is one tile tall; the camera has to keep its top in frame too
+const CAMERA_TILT_DEG := 55.0 # degrees down from horizontal - the "old 3D game" angled look
+const CAMERA_MIN_DISTANCE := 1.0
+const CAMERA_FRAMING_MARGIN := 1.05 # extra breathing room so the board doesn't touch the viewport edges
+const INVALID_POLE := Vector2i(-9999, -9999)
 
 enum Stany { IDLE, GRAB, SELECT, PLACEMENT, DUCK, PROMOTION, HOLE_PLACEMENT }
 const OKNO = preload("res://scenes/okno_rzutu.tscn")
@@ -11,10 +28,15 @@ const MAIN_MENU_BACKGROUND = preload("res://scenes/tlo_ekranu_glownego.tscn")
 const MATERIAL_VALUES := {"P": 1, "S": 2, "G": 2, "W": 4, "H": 6, "K": 6}
 const PROMOTION_CHOICES := ["H", "W", "G", "S"]
 const PROMOTION_LABELS := {"H": "Hetman", "W": "Wieża", "G": "Goniec", "S": "Skoczek"}
+const CREAM_COLOR := Color8(255, 228, 196)
+const DARK_COLOR := Color8(0, 40, 10)
 
 var stan := Stany.IDLE
 var figury: Array = []
 var dostepne_pola: Array[Vector2i] = []
+var tiles: Dictionary = {} # Vector2i -> MeshInstance3D, mirrors dostepne_pola visually
+var cream_material: StandardMaterial3D
+var dark_material: StandardMaterial3D
 var chwycona = null
 var wybrana = null
 var poczatkowe_pole := Vector2i.ZERO
@@ -30,7 +52,7 @@ var _prev_mouse_pressed := false
 var active_cards := {"b": "", "c": ""}
 var duck_position := Vector2i(-99, -99)
 var duck_pending := false
-var duck_marker: Sprite2D
+var duck_marker: Sprite3D
 var promotion_pending := false
 var promotion_figure = null
 var promotion_picker: Control
@@ -40,7 +62,8 @@ var player_colors := {"b": Color.WHITE, "c": Color.WHITE}
 var board_flipped := false
 var white_loadout_choice := 0
 var black_loadout_choice := 0
-var board_max := 7 # 0..7 by default; board_10x10 raises this to 9
+var board_min := 0 # 0..7 by default; board_10x10 widens this to -1..8
+var board_max := 7
 var bialy_holes := 0
 var czarny_holes := 0
 var holes: Array[Vector2i] = []
@@ -48,8 +71,10 @@ var holes: Array[Vector2i] = []
 func _ready() -> void:
 	add_to_group("game_main")
 	_add_menu_background()
+	_init_tile_materials()
 	generacja_pol(6)
-	get_viewport().size_changed.connect(_center_board)
+	_on_window_resized()
+	get_viewport().size_changed.connect(_on_window_resized)
 	_create_duck_marker()
 	_create_promotion_picker()
 	get_viewport().size_changed.connect(func(): _center_screen_control(promotion_picker, Vector2(300, 70)))
@@ -77,26 +102,84 @@ func _ready() -> void:
 # cards are active, so this only runs once active_cards is actually known -
 # right away for online, or once the local loadout picker's choice is made.
 func _apply_active_cards_setup() -> void:
+	board_min = CardHooks.board_min(active_cards)
 	board_max = CardHooks.board_max(active_cards)
-	_center_board()
+	_center_camera()
 	bialy_holes = CardHooks.starting_holes(active_cards, "b")
 	czarny_holes = CardHooks.starting_holes(active_cards, "c")
 
-# Anchor percentages (0.5 = center) only resolve against the VIEWPORT when
-# there's no Control ancestor above a node - but that resolution can be
-# stale/wrong for a Control built and added to a Node2D scene root at
-# runtime (the loadout and promotion pickers), same class of problem
-# control.gd already works around for the coin-toss overlay. Sidestep it
-# entirely: leave anchors at their 0 default and set position/size directly
-# from the actual viewport rect.
+# Anchor percentages (0.5 = center) only resolve correctly once a Control is
+# actually inside the tree with a settled size - for one built and added at
+# runtime (the loadout and promotion pickers) that can be stale/wrong on the
+# first frame, same class of problem control.gd already works around for the
+# coin-toss overlay. Sidestep it entirely: leave anchors at their 0 default
+# and set position/size directly from the actual viewport rect.
 func _center_screen_control(control: Control, size: Vector2) -> void:
 	control.size = size
 	control.position = ((get_viewport_rect().size - size) / 2.0).round()
 
-func _center_board() -> void:
-	var board_pixels := Vector2((board_max + 1) * TILE_SIZE, (board_max + 1) * TILE_SIZE)
-	var viewport_size := get_viewport_rect().size
-	board_root.position = ((viewport_size - board_pixels) / 2.0).round()
+# A Control parented to a Node2D anchors against an EMPTY rect, so "full
+# rect" anchors silently collapse the container to 0x0 and none of the board
+# is ever drawn - the same trap _center_screen_control() works around for the
+# runtime-built pickers. Size the container by hand instead; its `stretch`
+# then keeps the SubViewport (and with it the Camera3D's aspect ratio and
+# ray-casts) matched to the real window 1:1, so mouse-position math done in
+# the outer 2D viewport maps straight onto the board.
+func _on_window_resized() -> void:
+	board_container.position = Vector2.ZERO
+	board_container.size = get_viewport_rect().size
+	_center_camera()
+
+func _init_tile_materials() -> void:
+	cream_material = StandardMaterial3D.new()
+	cream_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	cream_material.albedo_color = CREAM_COLOR
+	dark_material = StandardMaterial3D.new()
+	dark_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	dark_material.albedo_color = DARK_COLOR
+
+# Frames the camera so the whole active board (span ranges 8..10 depending on
+# board_10x10) fits inside the viewport, and rotates it 180 degrees for the
+# flipped (guest) view instead of mirroring every board coordinate the way
+# the old 2D _view() helper used to.
+func _center_camera() -> void:
+	var center := (board_min + board_max) / 2.0
+	camera_rig.position = Vector3(center, 0.0, center) * TILE_SIZE_3D
+	camera_rig.rotation = Vector3(0.0, PI if board_flipped else 0.0, 0.0)
+	var half := (board_max - board_min + 1) * TILE_SIZE_3D * 0.5
+	_place_camera(half, half)
+
+# Pulls the camera back along its fixed tilt until every corner of the board
+# - and the top of a piece standing on it - is inside the frustum. The
+# distance is solved per corner rather than measured from the camera's
+# ground footprint: for a tilted perspective camera that footprint is a
+# trapezoid running off toward the horizon, so its bounding box claims a far
+# larger view than the part of it the board can actually use.
+func _place_camera(half_x: float, half_z: float) -> void:
+	var tilt := deg_to_rad(CAMERA_TILT_DEG)
+	var viewport_size := Vector2(board_viewport.size)
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		viewport_size = get_viewport_rect().size
+	# Camera3D keeps the vertical FOV by default, so the horizontal
+	# half-angle is the one derived from the aspect ratio.
+	var tan_v := tan(deg_to_rad(camera.fov) * 0.5) / CAMERA_FRAMING_MARGIN
+	var tan_h := tan_v * (viewport_size.x / viewport_size.y)
+	var distance := CAMERA_MIN_DISTANCE
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			for corner_y in [0.0, PIECE_HEIGHT]:
+				# The corner expressed along the camera's own axes, with the
+				# camera still sitting on the pivot: backing it off by
+				# `distance` then simply adds `distance` to the depth, which
+				# turns each fit condition into a one-line solve for it.
+				var corner := Vector3(sx * half_x, corner_y, sz * half_z)
+				var right := corner.x
+				var up := corner.y * cos(tilt) - corner.z * sin(tilt)
+				var depth := corner.y * sin(tilt) + corner.z * cos(tilt)
+				distance = maxf(distance, depth + absf(right) / tan_h)
+				distance = maxf(distance, depth + absf(up) / tan_v)
+	camera.position = Vector3(0.0, sin(tilt), cos(tilt)) * distance
+	camera.rotation = Vector3(-tilt, 0.0, 0.0)
 
 func _add_menu_background() -> void:
 	match_background = MAIN_MENU_BACKGROUND.instantiate()
@@ -241,9 +324,11 @@ func _on_coin_finished() -> void:
 		$dzwiek/szach.play()
 
 func _process(_delta: float) -> void:
-	if game_finished or not input_enabled:
+	if game_finished:
 		return
-	var pole := _view(plansza.local_to_map(plansza.to_local(get_global_mouse_position())))
+	if not input_enabled:
+		return
+	var pole := _pole_pod_myszka()
 	var pressed := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 	match stan:
 		Stany.IDLE: stan_idle(pole, pressed)
@@ -254,7 +339,7 @@ func _process(_delta: float) -> void:
 		Stany.HOLE_PLACEMENT: stan_hole_placement(pole, pressed)
 	_prev_mouse_pressed = pressed
 
-func stan_idle(_pole: Vector2i, pressed: bool) -> void:
+func stan_idle(pole: Vector2i, pressed: bool) -> void:
 	if duck_pending:
 		stan = Stany.DUCK
 		return
@@ -271,25 +356,23 @@ func stan_idle(_pole: Vector2i, pressed: bool) -> void:
 			stan = Stany.HOLE_PLACEMENT
 			return
 	if pressed and not _prev_mouse_pressed:
-		var figura = najechana_figura()
+		var figura = stoi_figura(pole)
 		if figura and figura.kolor == kolor_posuniecia:
 			_begin_grab(figura)
 
 func _begin_grab(figura) -> void:
 	chwycona = figura
 	poczatkowe_pole = pozycja(figura)
-	figura.top_level = true
 	stan = Stany.GRAB
 
 func stan_grab(pole: Vector2i, pressed: bool) -> void:
 	if pressed:
-		chwycona.global_position = get_global_mouse_position()
+		var hit = _mouse_ground_point()
+		if hit != null:
+			chwycona.position = hit + Vector3(0.0, PIECE_Y, 0.0)
 		return
 	# Restore before taking a rules snapshot; dragged pixels must never affect chess logic.
-	# chwycona.top_level is still true here, so position/global_position are
-	# equivalent - this is the board_root-local target either way.
-	chwycona.position = plansza.map_to_local(_view(poczatkowe_pole))
-	chwycona.top_level = false
+	chwycona.position = _piece_position(poczatkowe_pole)
 	if pole == poczatkowe_pole:
 		wybrana = chwycona
 		stan = Stany.SELECT
@@ -306,7 +389,7 @@ func stan_grab(pole: Vector2i, pressed: bool) -> void:
 func stan_select(pole: Vector2i, pressed: bool) -> void:
 	if not pressed or _prev_mouse_pressed:
 		return
-	var figura = najechana_figura()
+	var figura = stoi_figura(pole)
 	if figura and figura.kolor == kolor_posuniecia:
 		_begin_grab(figura)
 		return
@@ -382,14 +465,14 @@ func _apply_move(figura, cel: Vector2i) -> void:
 	if is_swap:
 		# knight_swap: the occupant (friend or foe, even a color's last
 		# king) trades places instead of being captured.
-		occupant.position = plansza.map_to_local(_view(pozycja(figura)))
+		occupant.position = _piece_position(pozycja(figura))
 	elif occupant:
 		zbicie(occupant)
-	figura.position = plansza.map_to_local(_view(cel))
+	figura.position = _piece_position(cel)
 	if not castle.is_empty():
 		var rook_figure = stoi_figura(castle["rook_from"])
 		if rook_figure:
-			rook_figure.position = plansza.map_to_local(_view(castle["rook_to"]))
+			rook_figure.position = _piece_position(castle["rook_to"])
 	var mover := kolor_posuniecia
 	if moze_promowac(figura):
 		_begin_promotion(figura, mover)
@@ -469,7 +552,9 @@ func _apply_tile(pole: Vector2i) -> void:
 func _apply_hole(pole: Vector2i) -> void:
 	dostepne_pola.erase(pole)
 	holes.append(pole)
-	plansza.erase_cell(_view(pole))
+	if tiles.has(pole):
+		tiles[pole].queue_free()
+		tiles.erase(pole)
 	if kolor_posuniecia == "b":
 		bialy_holes -= 1
 	else:
@@ -543,12 +628,6 @@ func _wire_pieces(color: String) -> Array:
 			result.append([figura.typ, pole.x, pole.y])
 	return result
 
-func najechana_figura():
-	for figura in figury:
-		if figura.mysz:
-			return figura
-	return null
-
 func stoi_figura(pole: Vector2i):
 	for figura in figury:
 		if pozycja(figura) == pole:
@@ -556,17 +635,7 @@ func stoi_figura(pole: Vector2i):
 	return null
 
 func pozycja(figura) -> Vector2i:
-	return _view(plansza.local_to_map(figura.position))
-
-# Mirrors a logical board coordinate to/from where it's actually drawn on
-# this client's screen. Board-side logic, network messages and dostepne_pola
-# always stay in logical space; only TileMapLayer cell addressing and mouse
-# hit-testing go through this. Applying the same 180-degree mirror twice is
-# the identity, so one function serves both directions.
-func _view(pole: Vector2i) -> Vector2i:
-	if not board_flipped:
-		return pole
-	return Vector2i(board_max - pole.x, board_max - pole.y)
+	return _world_to_tile(figura.position)
 
 func dodaj(typ: String, kolor: String, pole: Vector2i) -> void:
 	if not pole_na_planszy(pole) or stoi_figura(pole):
@@ -576,7 +645,7 @@ func dodaj(typ: String, kolor: String, pole: Vector2i) -> void:
 	figura.kolor = kolor
 	board_root.add_child(figura)
 	figury.append(figura)
-	figura.position = plansza.map_to_local(_view(pole))
+	figura.position = _piece_position(pole)
 
 func zbicie(figura) -> void:
 	figury.erase(figura)
@@ -586,10 +655,12 @@ func zbicie(figura) -> void:
 func generacja_pol(rozmiar: int) -> void:
 	for x in range(1, rozmiar + 1):
 		for y in range(1, rozmiar + 1):
-			dostepne_pola.append(Vector2i(x, y))
+			var pole := Vector2i(x, y)
+			dostepne_pola.append(pole)
+			_spawn_tile(pole)
 
 func pole_w_granicach(pole: Vector2i) -> bool:
-	return pole.x >= 0 and pole.x <= board_max and pole.y >= 0 and pole.y <= board_max
+	return pole.x >= board_min and pole.x <= board_max and pole.y >= board_min and pole.y <= board_max
 
 func pole_na_planszy(pole: Vector2i) -> bool:
 	return pole in dostepne_pola
@@ -597,21 +668,55 @@ func pole_na_planszy(pole: Vector2i) -> bool:
 func dodaj_pole(pole: Vector2i) -> void:
 	if not pole_w_granicach(pole) or pole_na_planszy(pole) or pole in holes:
 		return
-	var cell := _view(pole)
-	# The board texture's atlas only defines an 8x8 grid of source regions
-	# (coords 0..7 on each axis); board_10x10 lets cells reach 8/9, so the
-	# atlas coordinate has to wrap back into range or Godot silently draws
-	# nothing for that cell - the tile would look invisible even though it's
-	# genuinely part of dostepne_pola.
-	var atlas_cell := Vector2i(cell.x % 8, cell.y % 8)
-	plansza.set_cell(cell, 0, atlas_cell)
 	dostepne_pola.append(pole)
+	_spawn_tile(pole)
+
+func _spawn_tile(pole: Vector2i) -> void:
+	var mesh_instance := MeshInstance3D.new()
+	var mesh := PlaneMesh.new()
+	mesh.size = Vector2(TILE_SIZE_3D, TILE_SIZE_3D)
+	mesh_instance.mesh = mesh
+	var is_cream := (pole.x + pole.y) % 2 == 0
+	mesh_instance.material_override = cream_material if is_cream else dark_material
+	mesh_instance.position = _tile_to_world(pole)
+	board_root.add_child(mesh_instance)
+	tiles[pole] = mesh_instance
+
+# Casts a ray from the camera through the mouse position onto the board's
+# ground plane (y=0) and returns the world hit point, or null if the ray
+# never crosses it (shouldn't happen with a downward-tilted camera).
+func _mouse_ground_point():
+	# Rebase onto the board's own viewport, which need not start at (0, 0).
+	var mouse := get_viewport().get_mouse_position() - board_container.position
+	var origin := camera.project_ray_origin(mouse)
+	var dir := camera.project_ray_normal(mouse)
+	return Plane(Vector3.UP, 0.0).intersects_ray(origin, dir)
+
+func _pole_pod_myszka() -> Vector2i:
+	var hit = _mouse_ground_point()
+	return _world_to_tile(hit) if hit != null else INVALID_POLE
+
+func _tile_to_world(pole: Vector2i) -> Vector3:
+	return Vector3(pole.x, 0.0, pole.y) * TILE_SIZE_3D
+
+func _world_to_tile(point: Vector3) -> Vector2i:
+	return Vector2i(roundi(point.x / TILE_SIZE_3D), roundi(point.z / TILE_SIZE_3D))
+
+# Pieces/markers stand on top of the tile plane instead of being centered
+# inside it - see PIECE_Y.
+func _piece_position(pole: Vector2i) -> Vector3:
+	return _tile_to_world(pole) + Vector3(0.0, PIECE_Y, 0.0)
 
 func _create_duck_marker() -> void:
-	duck_marker = Sprite2D.new()
+	duck_marker = Sprite3D.new()
 	duck_marker.texture = DUCK_TEXTURE
-	duck_marker.scale = Vector2(0.28, 0.28)
-	duck_marker.position = Vector2(-999, -999)
+	duck_marker.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+	duck_marker.shaded = false
+	duck_marker.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	# The 3D texture-filter enum is not the CanvasItem one - nearest is 0 here.
+	duck_marker.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	duck_marker.pixel_size = (TILE_SIZE_3D / 64.0) * 0.28
+	duck_marker.visible = false
 	board_root.add_child(duck_marker)
 
 func _create_promotion_picker() -> void:
@@ -636,7 +741,8 @@ func _can_place_duck(pole: Vector2i) -> bool:
 
 func _apply_duck(pole: Vector2i) -> void:
 	duck_position = pole
-	duck_marker.position = plansza.map_to_local(_view(pole))
+	duck_marker.position = _piece_position(pole)
+	duck_marker.visible = true
 	$dzwiek/ruch.play()
 
 func koniec_tury() -> void:

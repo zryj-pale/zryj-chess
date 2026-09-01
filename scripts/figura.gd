@@ -1,19 +1,15 @@
-extends Node2D
+extends Node3D
 
-@export var typ:String
-@export var pozycja:Vector2i
-@export var kolor:String
-@export var mysz = false
-@export var warstwa = self.visibility_layer
+@export var typ: String
+@export var kolor: String
 
-@onready var kolizje = [
-	$tekstura/Area2D/S,
-	$tekstura/Area2D/P,
-	$tekstura/Area2D/G,
-	$tekstura/Area2D/W,
-	$tekstura/Area2D/H,
-	$tekstura/Area2D/Kb,
-	$tekstura/Area2D/Kc]
+# Node3D has no modulate of its own (that's a CanvasItem/2D concept) - forward
+# it to the sprite, so callers that tint a whole figura (e.g. the gray army-
+# creator preview) don't need to know it's actually a Sprite3D underneath.
+var modulate: Color = Color.WHITE:
+	set(value):
+		modulate = value
+		$tekstura.modulate = value
 
 const WSPOLRZEDNE_SPRITE = {
 	"b_pionkler" : Rect2(0, 0, 64, 64),
@@ -47,37 +43,8 @@ const NAZWY = {
 
 func _ready() -> void:
 	$tekstura.region_rect = WSPOLRZEDNE_SPRITE[NAZWY[typ+kolor]]
-	ustaw_kolizje(typ)
 
-
-func _on_area_2d_mouse_entered() -> void:
-	mysz = true
-
-
-func _on_area_2d_mouse_exited() -> void:
-	mysz = false
 
 func promocja(typ_figury):
 	typ = typ_figury
 	$tekstura.region_rect = WSPOLRZEDNE_SPRITE[NAZWY[typ+kolor]]
-	ustaw_kolizje(typ)
-	
-
-func ustaw_kolizje(typ_figury):
-	for kolizja in kolizje:
-		kolizja.disabled = true
-	match typ_figury:
-		"S":
-			$tekstura/Area2D/S.disabled = false
-		"P":
-			$tekstura/Area2D/P.disabled = false
-		"B":
-			$tekstura/Area2D/B.disabled = false
-		"G":
-			$tekstura/Area2D/G.disabled = false
-		"W":
-			$tekstura/Area2D/W.disabled = false
-		"H":
-			$tekstura/Area2D/H.disabled = false
-		"K":
-			$tekstura/Area2D/Kc.disabled = false

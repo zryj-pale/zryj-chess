@@ -19,10 +19,6 @@ run/main_scene="uid://b1d864e021a2s"
 config/features=PackedStringArray("4.7", "Mobile")
 boot_splash/image="uid://cmbtixykhyb0q"
 
-[audio]
-
-buses/default_bus_layout="res://default_bus_layout.tres"
-
 [autoload]
 
 PozycjaOsobista="*res://scripts/pozycja_osobista.gd"

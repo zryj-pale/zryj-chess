@@ -180,8 +180,9 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 
 - Projekt Godot 4.7 w trybie renderowania Mobile.
 - Menu, intro wideo i audio oraz wymagany, zapamiętywany nick gracza; pole nicku w prawym górnym rogu menu, chowane po zapisaniu.
-- Pełny ekran bez rozciągania interfejsu: `window/stretch/mode=canvas_items` + `aspect=expand` — przyciski, HUD i plansza mają natywny rozmiar, tylko animowane tło (`tlo_ekranu_glownego.gd`) samo skaluje się do rozmiaru okna. Intro wideo zostaje w oryginalnym, wyśrodkowanym kwadracie 512×512 z czarnym tłem widocznym tylko podczas jego odtwarzania.
+- Pełny ekran bez rozciągania interfejsu: `window/stretch/mode=canvas_items` + `aspect=expand` — przyciski i HUD mają natywny rozmiar, animowane tło (`tlo_ekranu_glownego.gd`) samo skaluje się do rozmiaru okna, a plansza jest kadrowana kamerą tak, by zawsze mieściła się w oknie (`_center_camera()`). Intro wideo zostaje w oryginalnym, wyśrodkowanym kwadracie 512×512 z czarnym tłem widocznym tylko podczas jego odtwarzania.
 - Kreator neutralnego ustawienia figur z budżetem punktowym.
+- Plansza i figury w 3D w stylu starych gier: płaskie pola (`PlaneMesh`, dwa kolory bez tekstury) i figury jako billboardy `Sprite3D` zawsze zwrócone do kamery, ustawionej pod stałym kątem. Cała reszta gry pozostaje 2D — szczegóły w sekcji 9.
 - Kolekcja kart jako osobny, paginowany ekran (`scenes/karty.tscn`, 16 kart/strona w siatce 4×4, kafelki w proporcji 3:4, jawny przycisk „Brak karty”) zamiast panelu wewnątrz kreatora armii. Wybór jednej karty na gracza, pięć pierwszych efektów i synchronizacja kart online.
 - Lokalna rozgrywka na 6×6 z możliwością poszerzania do 8×8.
 - Walidacja ruchów, szach/mat/pat, promocja (dynamicznie wykrywa skrajny wiersz aktualnej planszy, działa też po rozszerzeniu do 8×8) oraz obsługa wielu króli.
@@ -196,7 +197,7 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
   `godot --headless --path . --script res://tests/run_tests.gd` (kod wyjścia = liczba nieudanych asercji).
 - Przycisk "Opcje" pod polem nicku z wyciszeniem muzyki (osobna szyna audio `Music`, nie wycisza efektów dźwiękowych), zapamiętywane w profilu gracza.
 - Jeden przycisk dołączania online zamiast osobnych "host"/"dołącz" — rolę przydziela serwer wg kolejności dołączenia do kodu pokoju.
-- Widok planszy online zawsze pokazuje własną połowę gracza u dołu ekranu (odbicie czysto wizualne, bez wpływu na logikę/sieć).
+- Widok planszy online zawsze pokazuje własną połowę gracza u dołu ekranu — gość ma obróconą o 180° kamerę, więc figury i pola stoją w prawdziwych, logicznych współrzędnych po obu stronach (bez lustrzanego przeliczania jak dawne `_view()`).
 - Wybór figury przy promocji pionka (hetman/wieża/goniec/skoczek) zamiast automatycznej promocji do hetmana.
 - Dwa zapisywalne loadouty (ustawienie figur + karta) na gracza, przełączane w kreatorze armii; w lokalnym versus biały i czarny niezależnie wybierają, którym loadoutem grają, tuż przed rzutem monetą.
 - Placeholder ekranu wyniku (`scenes/wynik.tscn`) zamiast powrotu od razu do menu: „<nick> wygrywa” zawsze, a online dodatkowo duży napis „W FAPS”/„L FAPS” z perspektywy każdego z graczy osobno (lokalnie bez tego, bo obaj grający patrzą w ten sam ekran). Remis pokazuje „Remis”.
@@ -221,7 +222,7 @@ Kolekcja kart nadal mieści się na jednej stronie (12 ≤ 16/stronę), więc pa
 - Silnik: Godot 4.7.
 - Język: GDScript.
 - Renderowanie: Mobile.
-- Logika planszy: `TileMapLayer`.
+- Plansza i figury: 3D w osobnym `SubViewport` (własny `World3D`) — pola to `MeshInstance3D`/`PlaneMesh`, figury to billboardy `Sprite3D` (`BILLBOARD_FIXED_Y`), kamera pod stałym kątem. Reszta scen (HUD, tło, okna) pozostaje w 2D i rysuje się nad kontenerem planszy.
 - Sieć gry: `PacketPeerUDP` i własny protokół wiadomości.
 - Serwer pomocniczy: Python, UDP.
 
@@ -229,7 +230,7 @@ Kolekcja kart nadal mieści się na jednej stronie (12 ≤ 16/stronę), więc pa
 
 | Komponent | Odpowiedzialność |
 | --- | --- |
-| `main.gd` | Stan meczu, ruchy, walidacja, tury, szach/mat/pat, rozszerzanie planszy, akcje sieciowe, wybór figury przy promocji, lustrzany widok planszy online (`_view()`) i dynamiczna barwa tła zależna od materiału. W trybie lokalnym pokazuje ekran wyboru loadoutu przed rzutem monetą. |
+| `main.gd` | Stan meczu, ruchy, walidacja, tury, szach/mat/pat, rozszerzanie planszy, akcje sieciowe, wybór figury przy promocji, lustrzany widok planszy online (obrót kamery o 180°) i dynamiczna barwa tła zależna od materiału. W trybie lokalnym pokazuje ekran wyboru loadoutu przed rzutem monetą. |
 | `game_rules.gd` | Czysty silnik zasad: generowanie ruchów, ataki, szach, wielokrólewskość, mata/pat, dynamiczna promocja i losowanie bezpiecznej pozycji startowej. Pyta `CardHooks` ogólnie o efekty kart, nie zna konkretnych ID. |
 | `cards/card_registry.gd` | Dane kart: id, nazwa, opis, deklarowane hooki oraz walidacja niekompatybilnych par (`is_compatible`). |
 | `cards/card_hooks.gd` | Jedyne miejsce mapujące hooki (moves/capture/attacks/blocked_squares/win_condition/after_move/stalemate) na konkretne ID kart; `game_rules.gd` i `main.gd` wołają je generycznie. |
@@ -238,7 +239,7 @@ Kolekcja kart nadal mieści się na jednej stronie (12 ≤ 16/stronę), więc pa
 | `network_manager.gd` | Pokoje online, P2P hole punching, relay, niezawodne przesyłanie akcji, synchronizacja nicków, walidacja kompatybilności kart oraz przydzielanie roli host/gość wg kolejności dołączenia (serwer decyduje, nie klient). |
 | `lobby.gd` | Interfejs dołączania do pokoju jednym przyciskiem; zawsze wysyła pierwszy zapisany loadout. |
 | `pozycja_osobista.gd` | Autoload przechowujący dwa loadouty (układ + karta), profil nicku, wyciszenie muzyki i deterministyczny kolor gracza — wszystko trwale zapisywane w `profile.cfg`. |
-| `figura.gd` | Prezentacja figury, hitbox, typ, kolor i promocja. |
+| `figura.gd` | Prezentacja figury jako billboardu `Sprite3D`, typ, kolor i promocja (bez własnego hitboxa — trafienia liczy `stoi_figura()` po polu pod myszą). |
 | `hud.gd` | Liczniki dodatkowych pól i wizualizacja aktualnej tury. |
 | `rzut_moneta.gd`, `control.gd` | Zsynchronizowana, pełnoekranowa prezentacja rzutu monety 3D oraz przywracanie globalnych ustawień czasu/fizyki. |
 | `tlo_ekranu_glownego.gd` | Animowane tło menu/meczu; samo skaluje się do rzeczywistego rozmiaru okna i przyjmuje barwę od `main.gd`/`menu_glowne.gd`. |
