@@ -14,15 +14,20 @@ extends Node3D
 # in mid-air rather than floating on water.
 const BOB := 0.075 # +/- vertical travel
 const SWAY := 0.05 # +/- sideways travel
-const ROLL := 0.05 # +/- roll, radians (~3 degrees)
-const PITCH := 0.04 # +/- pitch, radians (~2 degrees)
 const SPEED := 0.5
-# Each sign turns on its own axis, slowly and continuously - one full
-# revolution takes TAU / SPIN_RATE, about sixteen seconds. Hovering stops it
-# and swings the word round to face the player, which is what makes a spinning
-# menu usable: the entry you are pointing at is the one you can read.
-const SPIN_RATE := 0.4 # radians per second
-const SPIN_SETTLE := 6.0 # how fast a hovered sign turns back to face front
+# The signs turn on all three axes, but they SWING rather than revolve: every
+# amplitude below stays well short of a quarter turn, so a word is never even
+# close to edge-on and always keeps at least most of its face toward the
+# player. That bound is the whole point - it is what a full revolution cost,
+# and it is why these numbers must not grow past roughly 1.2 radians.
+const YAW := 0.60 # +/- radians (~34 degrees)
+const PITCH := 0.28 # +/- radians (~16 degrees)
+const ROLL := 0.22 # +/- radians (~13 degrees)
+# Mutually irrational-ish rates, so the three axes never line up into one
+# repeating rock and the motion keeps looking free.
+const RATE_YAW := 0.37
+const RATE_PITCH := 0.53
+const RATE_ROLL := 0.61
 
 # Hover: the sign steps toward the camera and brightens. HOVER_LERP is how
 # fast it gets there - high enough to feel like a button, slow enough that the
@@ -44,7 +49,6 @@ var hovered := false
 var on_pressed := Callable()
 var _phase := 0.0
 var _blend := 0.0 # 0 = resting, 1 = fully hovered
-var _spin := 0.0
 var _material: StandardMaterial3D
 var _model: Node3D
 var _size := Vector3.ONE # the word's own extent, before any hover scaling
@@ -62,9 +66,6 @@ var _size := Vector3.ONE # the word's own extent, before any hover scaling
 static func create(model_path: String, node_name: String, fallback_text: String, phase: float) -> MenuSign3D:
 	var entry := MenuSign3D.new()
 	entry._phase = phase
-	# Starting the spin at the phase too, so the column never turns in lockstep
-	# and there are always some entries facing the player.
-	entry._spin = phase
 	entry._material = _build_material()
 	var model := _load_model(model_path, node_name)
 	if model == null:
@@ -90,10 +91,10 @@ func hit_rect(camera: Camera3D) -> Rect2:
 	for sx in [-1.0, 1.0]:
 		for sy in [-1.0, 1.0]:
 			for sz in [-1.0, 1.0]:
-				# Deliberately built WITHOUT the spin: a turning word is edge-on
-				# half the time, and a hit box that narrowed with it would be
-				# nearly unclickable exactly then. The resting footprint always
-				# covers what is drawn, so the error is on the forgiving side.
+				# Deliberately built WITHOUT the rotation: a turned word covers
+				# less screen than a square-on one, so the resting footprint
+				# always contains what is drawn and the hit box neither shrinks
+				# nor wanders as the sign swings.
 				var corner := global_position + Vector3(sx * half.x, sy * half.y, sz * half.z)
 				# A corner behind the camera unprojects to nonsense; the menu
 				# camera never gets that close, but a bad rect would swallow
@@ -121,17 +122,17 @@ func _process(delta: float) -> void:
 	var t := float(Time.get_ticks_msec()) / 1000.0 * SPEED + _phase
 	_blend = move_toward(_blend, 1.0 if hovered else 0.0, delta * HOVER_LERP)
 	var eased := _blend * _blend * (3.0 - 2.0 * _blend) # smoothstep, so the step in and out settles instead of stopping dead
-	if hovered:
-		# lerp_angle takes the short way round, so a sign caught mid-turn
-		# swings back the way it was already going rather than unwinding.
-		_spin = lerp_angle(_spin, 0.0, minf(1.0, delta * SPIN_SETTLE))
-	else:
-		_spin = wrapf(_spin + delta * SPIN_RATE, -PI, PI)
 	position = base_position + Vector3(
 		sin(t * 0.71) * SWAY,
 		sin(t) * BOB,
 		eased * HOVER_LIFT)
-	rotation = Vector3(sin(t * 0.53) * PITCH, _spin, sin(t * 0.61) * ROLL)
+	# Fading the whole rotation out on hover squares the word up to the player
+	# without needing to chase an angle: at eased = 1 every axis is simply 0.
+	var turn := 1.0 - eased
+	rotation = Vector3(
+		sin(t * RATE_PITCH + _phase * 1.7) * PITCH * turn,
+		sin(t * RATE_YAW) * YAW * turn,
+		sin(t * RATE_ROLL + _phase * 2.3) * ROLL * turn)
 	scale = Vector3.ONE * lerpf(1.0, HOVER_SCALE, eased)
 	if _material != null:
 		_material.emission_energy_multiplier = lerpf(EMISSION_IDLE, EMISSION_HOVER, eased)
