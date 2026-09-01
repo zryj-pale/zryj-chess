@@ -18,8 +18,6 @@ extends Node2D
 const MAX_PUNKTY := 16
 const SZARY_KOLOR := Color(0.55, 0.55, 0.55, 1.0)
 const WARTOSCI_FIGUR := {"P": 1, "S": 2, "G": 2, "W": 4, "H": 6, "K": 6}
-const CREAM_COLOR := Color8(255, 228, 196)
-const DARK_COLOR := Color8(0, 40, 10)
 
 const TILE_SIZE_3D := 1.0
 const PIECE_Y := TILE_SIZE_3D * 0.5 # lifts pieces so they stand on the tile plane instead of poking through it
@@ -39,9 +37,7 @@ const BOARD_AREA_BOTTOM := 428.0
 
 var figury: Array = []
 var dostepne_pola: Array[Vector2i] = []
-var tiles: Dictionary = {} # Vector2i -> MeshInstance3D, mirrors dostepne_pola visually
-var cream_material: StandardMaterial3D
-var dark_material: StandardMaterial3D
+var tiles: Dictionary = {} # Vector2i -> BoardTile, mirrors dostepne_pola visually
 var board_min_v := Vector2i.ZERO
 var board_max_v := Vector2i.ZERO
 var dragging := false
@@ -52,7 +48,7 @@ var drag_origin := Vector2i.ZERO
 var drag_moved := false
 
 func _ready() -> void:
-	_init_tile_materials()
+	BoardTile.add_lighting(board_root)
 	generacja_pol(1, 4, 6, 6)
 	_compute_board_bounds()
 	for pole in dostepne_pola:
@@ -64,14 +60,6 @@ func _ready() -> void:
 	for i in range(loadout_buttons.size()):
 		loadout_buttons[i].pressed.connect(_on_loadout_slot_pressed.bind(i))
 	_refresh_loadout_buttons()
-
-func _init_tile_materials() -> void:
-	cream_material = StandardMaterial3D.new()
-	cream_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	cream_material.albedo_color = CREAM_COLOR
-	dark_material = StandardMaterial3D.new()
-	dark_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	dark_material.albedo_color = DARK_COLOR
 
 # A Control parented to a Node2D anchors against an EMPTY rect, so "full
 # rect" anchors silently collapse the container to 0x0 and none of the board
@@ -150,6 +138,7 @@ func _refresh_loadout_buttons() -> void:
 		loadout_buttons[i].button_pressed = i == PozycjaOsobista.editing_loadout_index
 
 func _process(_delta: float) -> void:
+	_sync_levitation()
 	# The settings overlay sits above every scene and eats GUI clicks, but
 	# the drag itself follows the mouse from here, so it has to be dropped
 	# explicitly - otherwise a piece stays glued to the cursor behind the panel.
@@ -298,19 +287,31 @@ func generacja_pol(x: int, y: int, width: int, height: int) -> void:
 			dostepne_pola.append(Vector2i(w, h))
 
 func _spawn_tile(pole: Vector2i) -> void:
-	var mesh_instance := MeshInstance3D.new()
-	var mesh := PlaneMesh.new()
-	mesh.size = Vector2(TILE_SIZE_3D, TILE_SIZE_3D)
-	mesh_instance.mesh = mesh
-	var is_cream := (pole.x + pole.y) % 2 == 0
-	mesh_instance.material_override = cream_material if is_cream else dark_material
-	mesh_instance.position = _tile_to_world(pole)
-	board_root.add_child(mesh_instance)
-	tiles[pole] = mesh_instance
+	var is_light := (pole.x + pole.y) % 2 == 0
+	var tile := BoardTile.create(pole, _tile_to_world(pole), TILE_SIZE_3D, is_light)
+	board_root.add_child(tile)
+	tiles[pole] = tile
 
 # Casts a ray from the camera through the mouse position onto the board's
 # ground plane (y=0) and returns the world hit point, or null if the ray
 # never crosses it (shouldn't happen with a downward-tilted camera).
+# Pieces are placed on the fixed grid, not on the plates, so without this
+# they would stand still while the plate under them floats out from under
+# their feet. A piece's own node position is what pozycja() reads back to tell
+# which square it is on, so that must not be nudged - the drift goes on the
+# sprite child instead, where it is purely visual.
+func _sync_levitation() -> void:
+	for figura in figury:
+		var sprite: Node3D = figura.get_node_or_null("tekstura")
+		if sprite == null:
+			continue
+		# A dragged piece hangs off the cursor rather than off any one square.
+		sprite.position = Vector3.ZERO if figura == dragged_figure else _levitation_at(pozycja(figura))
+
+func _levitation_at(pole: Vector2i) -> Vector3:
+	var tile = tiles.get(pole)
+	return tile.levitation_offset() if tile != null else Vector3.ZERO
+
 func _mouse_ground_point():
 	# The board's viewport is inset inside the window, so a mouse position
 	# read from the outer 2D viewport has to be rebased onto it first.

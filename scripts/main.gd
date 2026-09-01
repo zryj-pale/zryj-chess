@@ -28,10 +28,9 @@ const MAIN_MENU_BACKGROUND = preload("res://scenes/tlo_ekranu_glownego.tscn")
 const MATERIAL_VALUES := {"P": 1, "S": 2, "G": 2, "W": 4, "H": 6, "K": 6}
 const PROMOTION_CHOICES := ["H", "W", "G", "S"]
 const PROMOTION_LABELS := {"H": "Hetman", "W": "Wieża", "G": "Goniec", "S": "Skoczek"}
-const CREAM_COLOR := Color8(255, 228, 196)
-const DARK_COLOR := Color8(0, 40, 10)
-# Green would be the chess convention, but the board's own dark squares are
-# green - these have to stay legible on BOTH the cream and the dark tile.
+# Green would be the chess convention, but these have to stay legible on BOTH
+# the light and the dark plate, which are close enough in tone that a subtle
+# tint would wash out on one of them.
 const MOVE_HINT_COLOR := Color(0.2, 0.62, 1.0, 0.62)
 const CAPTURE_HINT_COLOR := Color(1.0, 0.25, 0.2, 0.66)
 const PLACE_HINT_COLOR := Color(1.0, 0.82, 0.2, 0.6)
@@ -42,9 +41,7 @@ const HINT_KEY_STALE := "!stale" # sentinel _hint_signature() can never return
 var stan := Stany.IDLE
 var figury: Array = []
 var dostepne_pola: Array[Vector2i] = []
-var tiles: Dictionary = {} # Vector2i -> MeshInstance3D, mirrors dostepne_pola visually
-var cream_material: StandardMaterial3D
-var dark_material: StandardMaterial3D
+var tiles: Dictionary = {} # Vector2i -> BoardTile, mirrors dostepne_pola visually
 var move_hint_material: StandardMaterial3D
 var capture_hint_material: StandardMaterial3D
 var place_hint_material: StandardMaterial3D
@@ -88,6 +85,7 @@ func _ready() -> void:
 	add_to_group("game_main")
 	_add_menu_background()
 	_init_tile_materials()
+	BoardTile.add_lighting(board_root)
 	generacja_pol(6)
 	_on_window_resized()
 	get_viewport().size_changed.connect(_on_window_resized)
@@ -147,12 +145,6 @@ func _on_window_resized() -> void:
 	_center_camera()
 
 func _init_tile_materials() -> void:
-	cream_material = StandardMaterial3D.new()
-	cream_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	cream_material.albedo_color = CREAM_COLOR
-	dark_material = StandardMaterial3D.new()
-	dark_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	dark_material.albedo_color = DARK_COLOR
 	move_hint_material = _hint_material(MOVE_HINT_COLOR)
 	capture_hint_material = _hint_material(CAPTURE_HINT_COLOR)
 	place_hint_material = _hint_material(PLACE_HINT_COLOR)
@@ -350,6 +342,10 @@ func _on_coin_finished() -> void:
 		$dzwiek/szach.play()
 
 func _process(_delta: float) -> void:
+	# Kept ahead of every early-out below: the board keeps floating while the
+	# settings panel is open or the match is over, so the pieces standing on
+	# it have to keep up regardless.
+	_sync_levitation()
 	# Board input is polled from Input directly rather than read off events,
 	# so the settings overlay swallowing GUI clicks isn't enough - it has to
 	# be checked explicitly. A piece held mid-drag when the panel opens is
@@ -733,15 +729,10 @@ func dodaj_pole(pole: Vector2i) -> void:
 	_spawn_tile(pole)
 
 func _spawn_tile(pole: Vector2i) -> void:
-	var mesh_instance := MeshInstance3D.new()
-	var mesh := PlaneMesh.new()
-	mesh.size = Vector2(TILE_SIZE_3D, TILE_SIZE_3D)
-	mesh_instance.mesh = mesh
-	var is_cream := (pole.x + pole.y) % 2 == 0
-	mesh_instance.material_override = cream_material if is_cream else dark_material
-	mesh_instance.position = _tile_to_world(pole)
-	board_root.add_child(mesh_instance)
-	tiles[pole] = mesh_instance
+	var is_light := (pole.x + pole.y) % 2 == 0
+	var tile := BoardTile.create(pole, _tile_to_world(pole), TILE_SIZE_3D, is_light)
+	board_root.add_child(tile)
+	tiles[pole] = tile
 
 # Casts a ray from the camera through the mouse position onto the board's
 # ground plane (y=0) and returns the world hit point, or null if the ray
@@ -865,9 +856,38 @@ func _spawn_hint(pole: Vector2i, material: StandardMaterial3D) -> void:
 	mesh.size = Vector2(HINT_SIZE, HINT_SIZE) * TILE_SIZE_3D
 	mesh_instance.mesh = mesh
 	mesh_instance.material_override = material
-	mesh_instance.position = _tile_to_world(pole) + Vector3(0.0, HINT_Y, 0.0)
-	board_root.add_child(mesh_instance)
+	# Parented to the tile itself where there is one, so the quad rides along
+	# with the plate's levitation and stays exactly HINT_Y above its top face
+	# instead of sinking into a plate that has drifted up. PLACEMENT hints
+	# mark squares that have no tile yet, so those hang off the board root at
+	# the plane the plates rest on.
+	var tile = tiles.get(pole)
+	if tile != null:
+		mesh_instance.position = Vector3(0.0, HINT_Y, 0.0)
+		tile.add_child(mesh_instance)
+	else:
+		mesh_instance.position = _tile_to_world(pole) + Vector3(0.0, HINT_Y, 0.0)
+		board_root.add_child(mesh_instance)
 	hints.append(mesh_instance)
+
+# Pieces and the duck are placed on the fixed grid, not on the plates, so
+# without this they would stand still while the plate under them floats out
+# from under their feet. A piece's own node position is what pozycja() reads
+# back to tell which square it is on, so that must not be nudged - the drift
+# goes on the sprite child instead, where it is purely visual.
+func _sync_levitation() -> void:
+	for figura in figury:
+		var sprite: Node3D = figura.get_node_or_null("tekstura")
+		if sprite == null:
+			continue
+		# A held piece hangs off the cursor rather than off any one square.
+		sprite.position = Vector3.ZERO if figura == chwycona else _levitation_at(pozycja(figura))
+	if duck_marker != null and duck_marker.visible:
+		duck_marker.position = _piece_position(duck_position) + _levitation_at(duck_position)
+
+func _levitation_at(pole: Vector2i) -> Vector3:
+	var tile = tiles.get(pole)
+	return tile.levitation_offset() if tile != null else Vector3.ZERO
 
 func _clear_hints() -> void:
 	for hint in hints:

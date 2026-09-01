@@ -182,7 +182,8 @@ Docelowo ukryty tryb z bossami, nagrodami i odblokowaniami kart. Nie jest jeszcz
 - Menu, intro wideo i audio oraz wymagany, zapamiętywany nick gracza; pole nicku w prawym górnym rogu menu, chowane po zapisaniu.
 - Pełny ekran bez rozciągania interfejsu: `window/stretch/mode=canvas_items` + `aspect=expand` — przyciski i HUD mają natywny rozmiar, animowane tło (`tlo_ekranu_glownego.gd`) samo skaluje się do rozmiaru okna, a plansza jest kadrowana kamerą tak, by zawsze mieściła się w oknie (`_center_camera()`). Intro wideo zostaje w oryginalnym, wyśrodkowanym kwadracie 512×512 z czarnym tłem widocznym tylko podczas jego odtwarzania.
 - Kreator neutralnego ustawienia figur z budżetem punktowym.
-- Plansza i figury w 3D w stylu starych gier: płaskie pola (`PlaneMesh`, dwa kolory bez tekstury) i figury jako billboardy `Sprite3D` zawsze zwrócone do kamery, ustawionej pod stałym kątem. Cała reszta gry pozostaje 2D — szczegóły w sekcji 9.
+- Plansza i figury w 3D w stylu starych gier: pola to teksturowane płytki z modelu `assets/POLA/pole.glb`, a figury to billboardy `Sprite3D` zawsze zwrócone do kamery, ustawionej pod stałym kątem. Cała reszta gry pozostaje 2D — szczegóły w sekcji 9.
+- Płytki lewitują: każda krąży po własnej, powolnej pętli (góra-dół, delikatny dryf na boki i lekkie kołysanie), jakby plansza unosiła się na wodzie. Amplitudy są celowo małe — przynależność figury do pola musi być czytelna na pierwszy rzut oka, a trafienia myszą dalej liczone są względem stałej siatki, a nie względem pływającej płytki.
 - Kolekcja kart jako osobny, paginowany ekran (`scenes/karty.tscn`, 16 kart/strona w siatce 4×4, kafelki w proporcji 3:4, jawny przycisk „Brak karty”) zamiast panelu wewnątrz kreatora armii. Wybór jednej karty na gracza, pięć pierwszych efektów i synchronizacja kart online.
 - Lokalna rozgrywka na 6×6 z możliwością poszerzania do 8×8.
 - Walidacja ruchów, szach/mat/pat, promocja (dynamicznie wykrywa skrajny wiersz aktualnej planszy, działa też po rozszerzeniu do 8×8) oraz obsługa wielu króli.
@@ -226,7 +227,9 @@ Kolekcja kart nadal mieści się na jednej stronie (12 ≤ 16/stronę), więc pa
 - Silnik: Godot 4.7.
 - Język: GDScript.
 - Renderowanie: Mobile.
-- Plansza i figury: 3D w osobnym `SubViewport` (własny `World3D`) — pola to `MeshInstance3D`/`PlaneMesh`, figury to billboardy `Sprite3D` (`BILLBOARD_FIXED_Y`), kamera pod stałym kątem. Reszta scen (HUD, tło, okna) pozostaje w 2D i rysuje się nad kontenerem planszy.
+- Plansza i figury: 3D w osobnym `SubViewport` (własny `World3D`) — pola to `BoardTile` (model `pole.glb` + jedna z dwóch tekstur), figury to billboardy `Sprite3D` (`BILLBOARD_FIXED_Y`), kamera pod stałym kątem. Reszta scen (HUD, tło, okna) pozostaje w 2D i rysuje się nad kontenerem planszy.
+- Górna ścianka płytki leży dokładnie na `y = 0`, czyli tam, gdzie dawniej był płaski `PlaneMesh`. Dzięki temu cała reszta matematyki planszy (rzucanie promienia na płaszczyznę `y = 0`, figury na `PIECE_Y`, podpowiedzi na `HINT_Y`) działa bez zmian mimo grubości modelu.
+- Ten `SubViewport` jest przezroczysty (widać przez niego animowane tło 2D), więc nie ma w nim `WorldEnvironment` — płytki oświetlają dwa `DirectionalLight3D` dodawane z kodu, a rolę światła otoczenia gra `emission` materiału. Wszystko inne w tym viewporcie jest `unshaded`, więc te światła dotyczą wyłącznie płytek.
 - Sieć gry: `PacketPeerUDP` i własny protokół wiadomości.
 - Serwer pomocniczy: Python, UDP.
 
@@ -245,6 +248,7 @@ Kolekcja kart nadal mieści się na jednej stronie (12 ≤ 16/stronę), więc pa
 | `pozycja_osobista.gd` | Autoload przechowujący dwa loadouty (układ + karta), profil nicku, ustawienia (wyciszenie muzyki, podświetlanie ruchów, przypisania klawiszy) i deterministyczny kolor gracza — wszystko trwale zapisywane w `profile.cfg`. |
 | `ustawienia.gd` | Autoload z nakładką ustawień/pauzy nad każdą sceną: dźwięk, podświetlanie ruchów, mapa klawiszy, wyjście z meczu. Nie pauzuje drzewa (`NetworkManager` musi dalej działać) — sceny pollujące mysz pytają `Ustawienia.is_open()`. |
 | `figura.gd` | Prezentacja figury jako billboardu `Sprite3D`, typ, kolor i promocja (bez własnego hitboxa — trafienia liczy `stoi_figura()` po polu pod myszą). |
+| `board_tile.gd` | Klasa `BoardTile`: jedno pole planszy z modelu `pole.glb` (materiały, normalizacja rozmiaru modelu, oświetlenie planszy) wraz z animacją lewitacji. Wspólna dla meczu i kreatora armii. |
 | `hud.gd` | Liczniki dodatkowych pól i dziur (dziury tylko dla strony z kartą `board_hole`), nazwy stron oraz wyraźny wskaźnik tury w barwie nicku gracza. |
 | `rzut_moneta.gd`, `control.gd` | Zsynchronizowana, pełnoekranowa prezentacja rzutu monety 3D oraz przywracanie globalnych ustawień czasu/fizyki. |
 | `tlo_ekranu_glownego.gd` | Animowane tło menu/meczu; samo skaluje się do rzeczywistego rozmiaru okna i przyjmuje barwę od `main.gd`/`menu_glowne.gd`. |
