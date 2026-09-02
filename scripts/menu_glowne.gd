@@ -19,11 +19,15 @@ const SIGN_FOV := 45.0
 # column, so spacing the rows further apart on its own would just push the
 # camera back and shrink them. Raising the spacing and this together is what
 # keeps the words growing.
-const SIGN_VIEW_FRACTION := 0.80
+# 0.72 rather than filling the frame: at 0.80 the column ran from 10px off the
+# top of the canvas to 52px off the bottom, which read as a wall of text down
+# the left edge rather than a menu. The words give up about a tenth of their
+# size to buy that margin; the gaps between rows keep their proportion.
+const SIGN_VIEW_FRACTION := 0.72
 # Where the column sits across the screen, 0 = hard left, 0.5 = centred. The
 # photo that used to fill the left of the menu is gone, so the entries move
 # into that space instead of sitting in the middle of it.
-const SIGN_ALIGN_X := 0.20
+const SIGN_ALIGN_X := 0.21
 # The same, vertically: 0.5 is centred, larger sits lower. This only had to be
 # nudged off centre while the title ran across the top; the title has moved to
 # the corner, so the column gets the middle of the screen back.
@@ -126,6 +130,13 @@ func _frame_signs() -> void:
 		tallest = maxf(tallest, item.word_size().y)
 	var half_height := ((signs.size() - 1) * SIGN_SPACING + tallest) * 0.5
 	var half_width := widest * 0.5
+	# LEFT-aligned, not centred. The words differ wildly in length ("exit" is
+	# less than half of "position"), so centring them on each other left both
+	# edges of the column ragged and gave the eye nothing to line up on. Each
+	# word's own left edge goes to the same place instead; the node stays
+	# centred on its word, so hit testing and aiming are unaffected.
+	for item in signs:
+		item.base_position.x = (item.word_size().x - widest) * 0.5
 	var viewport_size := Vector2(sign_viewport.size)
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		viewport_size = get_viewport_rect().size
