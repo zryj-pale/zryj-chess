@@ -29,7 +29,9 @@ static func setup(viewport: SubViewport) -> void:
 # the scene is laid out in. Anything mapping between the mouse and this
 # viewport has to divide by the container's scale to get back into the
 # viewport's own pixels - see to_canvas() and the board's _mouse_ground_point().
-static func fit_to_pixels(container: SubViewportContainer, canvas_rect: Rect2) -> void:
+# Returns the display factor it used - how many real pixels one 2D unit is
+# worth - for callers that need to size something in screen pixels.
+static func fit_to_pixels(container: SubViewportContainer, canvas_rect: Rect2) -> float:
 	var canvas := container.get_viewport_rect().size
 	var pixels := Vector2(container.get_window().size)
 	var factor := 1.0
@@ -39,6 +41,7 @@ static func fit_to_pixels(container: SubViewportContainer, canvas_rect: Rect2) -
 	container.position = canvas_rect.position
 	container.scale = Vector2.ONE / factor
 	container.size = canvas_rect.size * factor
+	return factor
 
 # Turns a position inside the SubViewport (what Camera3D.unproject_position
 # hands back) into the 2D coordinates the mouse is reported in.

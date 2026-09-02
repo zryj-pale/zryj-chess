@@ -33,6 +33,18 @@ const SIGN_ALIGN_X := 0.21
 # the corner, so the column gets the middle of the screen back.
 const SIGN_ALIGN_Y := 0.50
 const SIGN_EDGE_MARGIN := 0.35 # world units the longest word keeps clear of the left edge
+# The signs come out of the renderer perfectly clean, which reads as plastic
+# rather than as part of this game - the pieces on the board are 64x64 pixel
+# art. A shader on the container roughs them up: a pixel grid first, then
+# channel split, scanlines, grain and the occasional row that slips sideways.
+# BLOCK is in 2D units and scaled to real pixels at runtime, so the blocks stay
+# the same apparent size on any resolution.
+const SIGN_DISRUPTION := preload("res://shaders/napisy_zaklocenie.gdshader")
+const SIGN_BLOCK := 2.6
+const SIGN_RGB_SPLIT := 0.5
+const SIGN_SCANLINE := 0.16
+const SIGN_GRAIN := 0.10
+const SIGN_TEAR := 0.55
 const SIGNS_Z_INDEX := 4 # above the animated background, below the intro video and the nickname field
 
 var tlo = null
@@ -72,6 +84,15 @@ func _build_signs() -> void:
 	# nickname field sitting under it.
 	sign_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sign_container.z_index = SIGNS_Z_INDEX
+	# Hit testing runs on the signs' geometry, not on these pixels, so
+	# scrambling the image cannot make a menu entry harder to click.
+	var disruption := ShaderMaterial.new()
+	disruption.shader = SIGN_DISRUPTION
+	disruption.set_shader_parameter("rgb_split", SIGN_RGB_SPLIT)
+	disruption.set_shader_parameter("scanline", SIGN_SCANLINE)
+	disruption.set_shader_parameter("grain", SIGN_GRAIN)
+	disruption.set_shader_parameter("tear", SIGN_TEAR)
+	sign_container.material = disruption
 	add_child(sign_container)
 
 	sign_viewport = SubViewport.new()
@@ -114,7 +135,12 @@ func _build_signs() -> void:
 		signs.append(item)
 
 func _on_window_resized() -> void:
-	Viewport3D.fit_to_pixels(sign_container, Rect2(Vector2.ZERO, get_viewport_rect().size))
+	var factor := Viewport3D.fit_to_pixels(sign_container, Rect2(Vector2.ZERO, get_viewport_rect().size))
+	# The shader measures in texels of a viewport rendered at real pixels, so
+	# the block size has to be converted out of 2D units or the grid would get
+	# finer the bigger the window.
+	if sign_container.material is ShaderMaterial:
+		(sign_container.material as ShaderMaterial).set_shader_parameter("block_size", SIGN_BLOCK * factor)
 	_frame_signs()
 
 # Pulls the camera back until the whole column fits inside SIGN_VIEW_FRACTION
