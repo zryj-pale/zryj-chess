@@ -58,13 +58,13 @@ const LAYERS := [
 # default: the match scene uses this same background behind a board made of
 # these very plates, and a second set floating over it would only confuse what
 # is playable. The menu switches them on.
-const TILE_COUNT := 14
+const TILE_COUNT := 20
 # Deep enough to sit AMONG the sheets rather than in front of them: the front
 # sheet's pole is 4.0 away and the middle one 8.5, so plates in this range pass
 # behind the first and in front of the second. That is what puts them in the
 # background instead of over it - and it works because the sheets test depth
 # without writing it, so a solid plate simply occludes the ones behind it.
-const TILE_DEPTH := Vector2(5.0, 10.5)
+const TILE_DEPTH := Vector2(10.0, 21.0)
 const TILE_SIZE := Vector2(0.6, 0.95)
 const TILE_DRIFT := Vector2(0.010, 0.045) # units per second
 const TILE_SPIN := Vector2(0.02, 0.09) # radians per second, about each plate own axis
@@ -72,7 +72,17 @@ const TILE_MARGIN := 0.8 # how far past the edge a plate goes before it wraps
 # Placed one per cell of this grid rather than at free random. Fourteen
 # independent draws clump badly - the first attempt put nearly all of them in
 # one corner - and a plate that has drifted away leaves its cell empty anyway.
-const TILE_GRID := Vector2i(5, 3)
+const TILE_GRID := Vector2i(5, 4)
+# The plates borrow BoardTile's lighting rig, but that rig is tuned for a board
+# a few units across sitting right under the camera. Out here the field is
+# twenty units deep, so the lamp is hung to match and every light is turned up:
+# left at board strength the plates fall outside the lamp entirely and go
+# flat. Only the LIGHTS are touched - BoardTile caches its materials
+# statically and shares them with the real board, so those are off limits.
+const TILE_KEY_ENERGY := 0.85
+const TILE_FILL_ENERGY := 0.30
+const TILE_LAMP_ENERGY := 2.4
+const TILE_LAMP_SPAN := 13.0
 
 const PULSE_LAYER := 1 # the middle layer keeps the old brightness ramp
 const FOV := 45.0
@@ -154,7 +164,8 @@ func _build_tiles() -> void:
 	_tile_root.name = "FloatingTiles"
 	viewport.add_child(_tile_root)
 	BoardTile.setup_board(viewport, _tile_root)
-	BoardTile.focus_lighting(_tile_root, Vector3(0.0, 0.0, -(TILE_DEPTH.x + TILE_DEPTH.y) * 0.5), 5.0)
+	BoardTile.focus_lighting(_tile_root, Vector3(0.0, 0.0, -(TILE_DEPTH.x + TILE_DEPTH.y) * 0.5), TILE_LAMP_SPAN)
+	_boost_tile_lighting()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260902 # fixed, so the scatter is the same every launch
 	var cells := range(TILE_GRID.x * TILE_GRID.y)
@@ -188,6 +199,20 @@ func _build_tiles() -> void:
 			"axis": Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)).normalized(),
 			"spin": rng.randf_range(TILE_SPIN.x, TILE_SPIN.y) * (1.0 if rng.randf() < 0.5 else -1.0),
 		})
+
+# The lamp's falloff is what makes one plate brighter than another as they
+# drift, so it is worth having reach out here rather than dying a few units
+# from the camera.
+func _boost_tile_lighting() -> void:
+	var key := _tile_root.get_node_or_null(BoardTile.KEY_LIGHT) as DirectionalLight3D
+	if key != null:
+		key.light_energy = TILE_KEY_ENERGY
+	var fill := _tile_root.get_node_or_null(BoardTile.FILL_LIGHT) as DirectionalLight3D
+	if fill != null:
+		fill.light_energy = TILE_FILL_ENERGY
+	var lamp := _tile_root.get_node_or_null(BoardTile.LAMP) as OmniLight3D
+	if lamp != null:
+		lamp.light_energy = TILE_LAMP_ENERGY
 
 # Half the world extent the camera can see at `depth` in front of it.
 func _visible_half(depth: float) -> Vector2:
