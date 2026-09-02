@@ -54,37 +54,6 @@ const LAYERS := [
 	{"radius": 15.0, "distance": 4.0, "half_angle": 32.0, "alpha": 1.0,
 		"apex": Vector2(-0.30, -0.52), "sway": Vector2(0.120, 0.090), "rate": Vector2(0.089, 0.071)},
 ]
-# Board plates drifting across the frame, in front of all three sheets. Off by
-# default: the match scene uses this same background behind a board made of
-# these very plates, and a second set floating over it would only confuse what
-# is playable. The menu switches them on.
-const TILE_COUNT := 20
-# Deep enough to sit AMONG the sheets rather than in front of them: the front
-# sheet's pole is 4.0 away and the middle one 8.5, so plates in this range pass
-# behind the first and in front of the second. That is what puts them in the
-# background instead of over it - and it works because the sheets test depth
-# without writing it, so a solid plate simply occludes the ones behind it.
-const TILE_DEPTH := Vector2(10.0, 21.0)
-const TILE_SIZE := Vector2(0.6, 0.95)
-const TILE_DRIFT := Vector2(0.04, 0.18) # units per second
-const TILE_SPIN := Vector2(0.02, 0.09) # radians per second, about each plate own axis
-const TILE_MARGIN := 0.8 # how far past the edge a plate goes before it wraps
-const TILE_OVERFLOW := 1.15 # start positions reach a little past the frame
-# Placed one per cell of this grid rather than at free random. Fourteen
-# independent draws clump badly - the first attempt put nearly all of them in
-# one corner - and a plate that has drifted away leaves its cell empty anyway.
-const TILE_GRID := Vector2i(5, 4)
-# The plates borrow BoardTile's lighting rig, but that rig is tuned for a board
-# a few units across sitting right under the camera. Out here the field is
-# twenty units deep, so the lamp is hung to match and every light is turned up:
-# left at board strength the plates fall outside the lamp entirely and go
-# flat. Only the LIGHTS are touched - BoardTile caches its materials
-# statically and shares them with the real board, so those are off limits.
-const TILE_KEY_ENERGY := 0.85
-const TILE_FILL_ENERGY := 0.30
-const TILE_LAMP_ENERGY := 2.4
-const TILE_LAMP_SPAN := 13.0
-
 # The middle layer breathes: it brightens and dims again, endlessly.
 #
 # It used to be a SAWTOOTH - a fifty-second ramp that snapped back to zero -
@@ -102,7 +71,7 @@ const TILE_LAMP_SPAN := 13.0
 # breath spends half its time. Raise it if the dim end is the problem; raising
 # MAX does nothing for it.
 const PULSE_LAYER := 1
-const PULSE_PERIOD := 46.0 # seconds for a full brighten-and-dim
+const PULSE_PERIOD := 72.0 # seconds for a full brighten-and-dim
 const PULSE_MIN := 0.35
 const PULSE_MAX := 50.0
 const PULSE_FLUTTER := 2.0 # the faster alpha breathing, radians per second
@@ -117,21 +86,10 @@ var viewport: SubViewport
 var sheets: Array[MeshInstance3D] = []
 var materials: Array[StandardMaterial3D] = []
 var _time := 0.0
-# Set between instantiate() and add_child() to get the drifting plates.
-var floating_tiles := false
-var _tiles: Array = [] # {holder, velocity, spin}
-var _tile_root: Node3D
 
 func _ready() -> void:
 	_build()
-	# BEFORE the plates are placed, not after. _visible_half() reads the
-	# viewport's aspect, and until the container has been fitted the viewport
-	# is still at its default square size - which laid the plates out in a
-	# square field, so they covered the full height but only the middle half of
-	# the width.
 	_fit_to_viewport()
-	if floating_tiles:
-		_build_tiles()
 	get_viewport().size_changed.connect(_fit_to_viewport)
 
 func _build() -> void:
@@ -177,76 +135,6 @@ func _build() -> void:
 			-(radius + distance))
 		viewport.add_child(node)
 		sheets.append(node)
-
-# Real BoardTiles, so the plates drifting past are the same object the board is
-# made of rather than a lookalike. Each one hangs inside a holder: BoardTile
-# overwrites its own rotation every frame for its levitation, so the holder is
-# what carries the turn that stands the plate up to face the camera, the slow
-# spin, and the drift - leaving the plate free to keep bobbing inside it.
-func _build_tiles() -> void:
-	_tile_root = Node3D.new()
-	_tile_root.name = "FloatingTiles"
-	viewport.add_child(_tile_root)
-	BoardTile.setup_board(viewport, _tile_root)
-	BoardTile.focus_lighting(_tile_root, Vector3(0.0, 0.0, -(TILE_DEPTH.x + TILE_DEPTH.y) * 0.5), TILE_LAMP_SPAN)
-	_boost_tile_lighting()
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 20260902 # fixed, so the scatter is the same every launch
-	var cells := range(TILE_GRID.x * TILE_GRID.y)
-	cells.shuffle() # so consecutive plates are not neighbours in the grid
-	for i in range(TILE_COUNT):
-		var cell: int = cells[i]
-		var depth := rng.randf_range(TILE_DEPTH.x, TILE_DEPTH.y)
-		var half := _visible_half(depth)
-		# One plate per grid cell, jittered inside it. Spread is measured across
-		# the SCREEN, not in world units, so plates at different depths still
-		# come out evenly distributed in frame.
-		# Spread slightly past the frame, so some plates start half out of it
-		# rather than every one sitting neatly inside the edges.
-		var u := ((float(cell % TILE_GRID.x) + rng.randf()) / float(TILE_GRID.x) * 2.0 - 1.0) * TILE_OVERFLOW
-		var v := ((float(cell / TILE_GRID.x) + rng.randf()) / float(TILE_GRID.y) * 2.0 - 1.0) * TILE_OVERFLOW
-		var holder := Node3D.new()
-		holder.position = Vector3(u * half.x, v * half.y, -depth)
-		# Fully random orientation. Standing every plate square to the camera
-		# made a row of identical rectangles; tumbled, they catch the light
-		# differently and some pass edge-on, which is what sells them as
-		# objects rather than cards.
-		holder.rotation = Vector3(rng.randf_range(0.0, TAU), rng.randf_range(0.0, TAU), rng.randf_range(0.0, TAU))
-		var tile := BoardTile.create(Vector2i(i, 0), Vector3.ZERO, rng.randf_range(TILE_SIZE.x, TILE_SIZE.y), i % 2 == 0)
-		holder.add_child(tile)
-		_tile_root.add_child(holder)
-		var speed := rng.randf_range(TILE_DRIFT.x, TILE_DRIFT.y)
-		var angle := rng.randf_range(0.0, TAU)
-		_tiles.append({
-			"holder": holder,
-			"velocity": Vector2(cos(angle), sin(angle)) * speed,
-			# A fixed random axis rather than per-axis Euler rates: turning about
-			# one axis stays a steady tumble instead of wandering into gimbal.
-			"axis": Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)).normalized(),
-			"spin": rng.randf_range(TILE_SPIN.x, TILE_SPIN.y) * (1.0 if rng.randf() < 0.5 else -1.0),
-		})
-
-# The lamp's falloff is what makes one plate brighter than another as they
-# drift, so it is worth having reach out here rather than dying a few units
-# from the camera.
-func _boost_tile_lighting() -> void:
-	var key := _tile_root.get_node_or_null(BoardTile.KEY_LIGHT) as DirectionalLight3D
-	if key != null:
-		key.light_energy = TILE_KEY_ENERGY
-	var fill := _tile_root.get_node_or_null(BoardTile.FILL_LIGHT) as DirectionalLight3D
-	if fill != null:
-		fill.light_energy = TILE_FILL_ENERGY
-	var lamp := _tile_root.get_node_or_null(BoardTile.LAMP) as OmniLight3D
-	if lamp != null:
-		lamp.light_energy = TILE_LAMP_ENERGY
-
-# Half the world extent the camera can see at `depth` in front of it.
-func _visible_half(depth: float) -> Vector2:
-	var tan_v := tan(deg_to_rad(FOV) * 0.5)
-	var aspect := TEXTURE_ASPECT
-	if viewport != null and viewport.size.y > 0:
-		aspect = float(viewport.size.x) / float(viewport.size.y)
-	return Vector2(depth * tan_v * aspect, depth * tan_v)
 
 # A rectangle of sphere: a grid of vertices pushed out to `radius`, spanning
 # `half_angle` either side of the +Z pole horizontally and proportionally less
@@ -295,10 +183,8 @@ func _build_material(index: int, layer: Dictionary) -> StandardMaterial3D:
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	# The layers overlap almost completely, so distance sorting cannot be
 	# trusted to keep them in order; render_priority fixes it, back to front.
-	# Depth TESTING stays on, though - these are transparent and so write no
-	# depth of their own, which leaves priority in charge of their mutual
-	# order, while still letting solid things in front of them (the drifting
-	# plates) occlude them properly.
+	# They are transparent and so write no depth of their own, which is what
+	# leaves priority in charge rather than the depth buffer.
 	material.render_priority = index - 1
 	material.albedo_color = Color(1.0, 1.0, 1.0, float(layer["alpha"]))
 	return material
@@ -315,8 +201,6 @@ func _process(delta: float) -> void:
 	# The old flat layers kept this: a long, slow ramp that drives the middle
 	# layer far past white before snapping back, with the alpha breathing under
 	# it. Values above 1 blow out the same way they did as a 2D modulate.
-	if not _tiles.is_empty():
-		_drift_tiles(delta)
 	for i in range(sheets.size()):
 		var layer: Dictionary = LAYERS[i]
 		var sway: Vector2 = layer["sway"]
@@ -335,22 +219,5 @@ func _process(delta: float) -> void:
 			alpha = 0.8 + sin(_time * PULSE_FLUTTER) * 0.2
 		materials[i].albedo_color = Color(tint.r * brightness, tint.g * brightness, tint.b * brightness, alpha)
 
-# Plates leaving one side come back on the other, so the drift never runs out.
-func _drift_tiles(delta: float) -> void:
-	for entry in _tiles:
-		var holder: Node3D = entry["holder"]
-		var velocity: Vector2 = entry["velocity"]
-		holder.position += Vector3(velocity.x, velocity.y, 0.0) * delta
-		holder.rotate(entry["axis"], float(entry["spin"]) * delta)
-		var limit := _visible_half(absf(holder.position.z)) + Vector2.ONE * TILE_MARGIN
-		if absf(holder.position.x) > limit.x:
-			holder.position.x = -sign(holder.position.x) * limit.x
-		if absf(holder.position.y) > limit.y:
-			holder.position.y = -sign(holder.position.y) * limit.y
-
 func set_match_tint(value: Color) -> void:
 	target_tint = value
-	# The plates are lit rather than flat, so they take the colour through
-	# their lighting the same way the board does.
-	if _tile_root != null:
-		BoardTile.tint_lighting(_tile_root, value)
