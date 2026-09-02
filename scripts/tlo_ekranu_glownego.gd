@@ -66,9 +66,10 @@ const TILE_COUNT := 20
 # without writing it, so a solid plate simply occludes the ones behind it.
 const TILE_DEPTH := Vector2(10.0, 21.0)
 const TILE_SIZE := Vector2(0.6, 0.95)
-const TILE_DRIFT := Vector2(0.010, 0.045) # units per second
+const TILE_DRIFT := Vector2(0.04, 0.18) # units per second
 const TILE_SPIN := Vector2(0.02, 0.09) # radians per second, about each plate own axis
 const TILE_MARGIN := 0.8 # how far past the edge a plate goes before it wraps
+const TILE_OVERFLOW := 1.15 # start positions reach a little past the frame
 # Placed one per cell of this grid rather than at free random. Fourteen
 # independent draws clump badly - the first attempt put nearly all of them in
 # one corner - and a plate that has drifted away leaves its cell empty anyway.
@@ -104,7 +105,14 @@ var _tile_root: Node3D
 
 func _ready() -> void:
 	_build()
+	# BEFORE the plates are placed, not after. _visible_half() reads the
+	# viewport's aspect, and until the container has been fitted the viewport
+	# is still at its default square size - which laid the plates out in a
+	# square field, so they covered the full height but only the middle half of
+	# the width.
 	_fit_to_viewport()
+	if floating_tiles:
+		_build_tiles()
 	get_viewport().size_changed.connect(_fit_to_viewport)
 
 func _build() -> void:
@@ -151,9 +159,6 @@ func _build() -> void:
 		viewport.add_child(node)
 		sheets.append(node)
 
-	if floating_tiles:
-		_build_tiles()
-
 # Real BoardTiles, so the plates drifting past are the same object the board is
 # made of rather than a lookalike. Each one hangs inside a holder: BoardTile
 # overwrites its own rotation every frame for its levitation, so the holder is
@@ -177,8 +182,10 @@ func _build_tiles() -> void:
 		# One plate per grid cell, jittered inside it. Spread is measured across
 		# the SCREEN, not in world units, so plates at different depths still
 		# come out evenly distributed in frame.
-		var u := (float(cell % TILE_GRID.x) + rng.randf()) / float(TILE_GRID.x) * 2.0 - 1.0
-		var v := (float(cell / TILE_GRID.x) + rng.randf()) / float(TILE_GRID.y) * 2.0 - 1.0
+		# Spread slightly past the frame, so some plates start half out of it
+		# rather than every one sitting neatly inside the edges.
+		var u := ((float(cell % TILE_GRID.x) + rng.randf()) / float(TILE_GRID.x) * 2.0 - 1.0) * TILE_OVERFLOW
+		var v := ((float(cell / TILE_GRID.x) + rng.randf()) / float(TILE_GRID.y) * 2.0 - 1.0) * TILE_OVERFLOW
 		var holder := Node3D.new()
 		holder.position = Vector3(u * half.x, v * half.y, -depth)
 		# Fully random orientation. Standing every plate square to the camera
