@@ -39,13 +39,20 @@ const LAYER_TEXTURES := [
 # comfortably wider than the roughly 16 degrees the camera can actually see of
 # it, or an edge swings into frame as the layer drifts.
 # `sway` is the drift amplitude in radians and `rate` how fast it runs.
+#
+# `apex` is where that sphere's near pole sits on screen, in -1..1 from the
+# middle. Each layer gets its own spot so the three bulges peak in three
+# different places instead of stacking on the camera's axis - which is what
+# makes it read as three separate spheres rather than one surface. Moving a
+# pole off centre costs cap: the far side of the frame is then further round
+# the sphere, so `half_angle` has to grow with the offset.
 const LAYERS := [
-	{"radius": 40.0, "distance": 15.0, "half_angle": 30.0, "alpha": 0.56,
-		"sway": Vector2(0.075, 0.055), "rate": Vector2(0.041, 0.029)},
-	{"radius": 26.0, "distance": 8.5, "half_angle": 30.0, "alpha": 1.0,
-		"sway": Vector2(0.095, 0.070), "rate": Vector2(0.063, 0.047)},
-	{"radius": 15.0, "distance": 4.0, "half_angle": 30.0, "alpha": 1.0,
-		"sway": Vector2(0.120, 0.090), "rate": Vector2(0.089, 0.071)},
+	{"radius": 60.0, "distance": 16.0, "half_angle": 27.0, "alpha": 0.56,
+		"apex": Vector2(-0.42, 0.26), "sway": Vector2(0.055, 0.040), "rate": Vector2(0.041, 0.029)},
+	{"radius": 26.0, "distance": 8.5, "half_angle": 38.0, "alpha": 1.0,
+		"apex": Vector2(0.48, -0.40), "sway": Vector2(0.095, 0.070), "rate": Vector2(0.063, 0.047)},
+	{"radius": 15.0, "distance": 4.0, "half_angle": 32.0, "alpha": 1.0,
+		"apex": Vector2(-0.30, -0.52), "sway": Vector2(0.120, 0.090), "rate": Vector2(0.089, 0.071)},
 ]
 const PULSE_LAYER := 1 # the middle layer keeps the old brightness ramp
 const FOV := 45.0
@@ -97,8 +104,16 @@ func _build() -> void:
 		materials.append(material)
 		# The mesh is built around the sphere's centre, so the node's origin IS
 		# that centre - which is what lets the drift below be a plain rotation
-		# and still slide the sheet along the sphere's surface.
-		node.position = Vector3(0.0, 0.0, -(radius + float(layer["distance"])))
+		# and still slide the sheet along the sphere's surface. Sliding the
+		# centre sideways carries the near pole with it, which is how each
+		# layer's bulge ends up somewhere different on screen.
+		var distance: float = layer["distance"]
+		var apex: Vector2 = layer["apex"]
+		var tan_v := tan(deg_to_rad(FOV) * 0.5)
+		node.position = Vector3(
+			apex.x * distance * tan_v * TEXTURE_ASPECT,
+			apex.y * distance * tan_v,
+			-(radius + distance))
 		viewport.add_child(node)
 		sheets.append(node)
 
