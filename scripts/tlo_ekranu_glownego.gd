@@ -54,6 +54,17 @@ const LAYERS := [
 	{"radius": 15.0, "distance": 4.0, "half_angle": 32.0, "alpha": 1.0,
 		"apex": Vector2(-0.30, -0.52), "sway": Vector2(0.120, 0.090), "rate": Vector2(0.089, 0.071)},
 ]
+# Board plates drifting across the frame, in front of all three sheets. Off by
+# default: the match scene uses this same background behind a board made of
+# these very plates, and a second set floating over it would only confuse what
+# is playable. The menu switches them on.
+const TILE_COUNT := 14
+const TILE_DEPTH := Vector2(2.0, 3.6) # distance in front of the camera, near..far
+const TILE_SIZE := Vector2(0.20, 0.44)
+const TILE_DRIFT := Vector2(0.012, 0.05) # units per second
+const TILE_SPIN := 0.10 # max radians per second, in the plane of the screen
+const TILE_MARGIN := 0.6 # how far past the edge a plate goes before it wraps
+
 const PULSE_LAYER := 1 # the middle layer keeps the old brightness ramp
 const FOV := 45.0
 const CAP_SEGMENTS := 40 # enough that the bulge is smooth rather than faceted
@@ -67,6 +78,10 @@ var sheets: Array[MeshInstance3D] = []
 var materials: Array[StandardMaterial3D] = []
 var przez := 100.0
 var _time := 0.0
+# Set between instantiate() and add_child() to get the drifting plates.
+var floating_tiles := false
+var _tiles: Array = [] # {holder, velocity, spin}
+var _tile_root: Node3D
 
 func _ready() -> void:
 	_build()
@@ -117,6 +132,52 @@ func _build() -> void:
 		viewport.add_child(node)
 		sheets.append(node)
 
+	if floating_tiles:
+		_build_tiles()
+
+# Real BoardTiles, so the plates drifting past are the same object the board is
+# made of rather than a lookalike. Each one hangs inside a holder: BoardTile
+# overwrites its own rotation every frame for its levitation, so the holder is
+# what carries the turn that stands the plate up to face the camera, the slow
+# spin, and the drift - leaving the plate free to keep bobbing inside it.
+func _build_tiles() -> void:
+	_tile_root = Node3D.new()
+	_tile_root.name = "FloatingTiles"
+	viewport.add_child(_tile_root)
+	BoardTile.setup_board(viewport, _tile_root)
+	BoardTile.focus_lighting(_tile_root, Vector3(0.0, 0.0, -TILE_DEPTH.y), 2.5)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260902 # fixed, so the scatter is the same every launch
+	for i in range(TILE_COUNT):
+		var depth := rng.randf_range(TILE_DEPTH.x, TILE_DEPTH.y)
+		var half := _visible_half(depth)
+		var holder := Node3D.new()
+		holder.position = Vector3(
+			rng.randf_range(-half.x, half.x),
+			rng.randf_range(-half.y, half.y),
+			-depth)
+		# -90 degrees about X stands the plate up: BoardTile builds it lying
+		# flat with its face pointing up, which this camera would see edge-on.
+		holder.rotation = Vector3(-PI * 0.5, 0.0, rng.randf_range(0.0, TAU))
+		var tile := BoardTile.create(Vector2i(i, 0), Vector3.ZERO, rng.randf_range(TILE_SIZE.x, TILE_SIZE.y), i % 2 == 0)
+		holder.add_child(tile)
+		_tile_root.add_child(holder)
+		var speed := rng.randf_range(TILE_DRIFT.x, TILE_DRIFT.y)
+		var angle := rng.randf_range(0.0, TAU)
+		_tiles.append({
+			"holder": holder,
+			"velocity": Vector2(cos(angle), sin(angle)) * speed,
+			"spin": rng.randf_range(-TILE_SPIN, TILE_SPIN),
+		})
+
+# Half the world extent the camera can see at `depth` in front of it.
+func _visible_half(depth: float) -> Vector2:
+	var tan_v := tan(deg_to_rad(FOV) * 0.5)
+	var aspect := TEXTURE_ASPECT
+	if viewport != null and viewport.size.y > 0:
+		aspect = float(viewport.size.x) / float(viewport.size.y)
+	return Vector2(depth * tan_v * aspect, depth * tan_v)
+
 # A rectangle of sphere: a grid of vertices pushed out to `radius`, spanning
 # `half_angle` either side of the +Z pole horizontally and proportionally less
 # vertically so the 16:9 artwork keeps its shape. UVs are the plain grid
@@ -162,11 +223,12 @@ func _build_material(index: int, layer: Dictionary) -> StandardMaterial3D:
 	# neither here nor there - and not caring about it removes a whole class of
 	# way for the background to come out invisible.
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	# The layers overlap almost completely and their bounding boxes all sit on
-	# the camera's axis, so distance sorting cannot be trusted to keep them in
-	# order. Fixed order instead, back to front, with depth testing out of the
-	# way.
-	material.no_depth_test = true
+	# The layers overlap almost completely, so distance sorting cannot be
+	# trusted to keep them in order; render_priority fixes it, back to front.
+	# Depth TESTING stays on, though - these are transparent and so write no
+	# depth of their own, which leaves priority in charge of their mutual
+	# order, while still letting solid things in front of them (the drifting
+	# plates) occlude them properly.
 	material.render_priority = index - 1
 	material.albedo_color = Color(1.0, 1.0, 1.0, float(layer["alpha"]))
 	return material
@@ -186,6 +248,8 @@ func _process(delta: float) -> void:
 	przez += 2.0 * delta
 	if przez > 100.0:
 		przez = 0.0
+	if not _tiles.is_empty():
+		_drift_tiles(delta)
 	for i in range(sheets.size()):
 		var layer: Dictionary = LAYERS[i]
 		var sway: Vector2 = layer["sway"]
@@ -204,5 +268,22 @@ func _process(delta: float) -> void:
 			alpha = 0.8 + sin(przez) / 5.0
 		materials[i].albedo_color = Color(tint.r * brightness, tint.g * brightness, tint.b * brightness, alpha)
 
+# Plates leaving one side come back on the other, so the drift never runs out.
+func _drift_tiles(delta: float) -> void:
+	for entry in _tiles:
+		var holder: Node3D = entry["holder"]
+		var velocity: Vector2 = entry["velocity"]
+		holder.position += Vector3(velocity.x, velocity.y, 0.0) * delta
+		holder.rotation.z += float(entry["spin"]) * delta
+		var limit := _visible_half(absf(holder.position.z)) + Vector2.ONE * TILE_MARGIN
+		if absf(holder.position.x) > limit.x:
+			holder.position.x = -sign(holder.position.x) * limit.x
+		if absf(holder.position.y) > limit.y:
+			holder.position.y = -sign(holder.position.y) * limit.y
+
 func set_match_tint(value: Color) -> void:
 	target_tint = value
+	# The plates are lit rather than flat, so they take the colour through
+	# their lighting the same way the board does.
+	if _tile_root != null:
+		BoardTile.tint_lighting(_tile_root, value)

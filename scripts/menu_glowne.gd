@@ -67,6 +67,10 @@ func _ready() -> void:
 	# nickname field and label keep their own filters and still get theirs.
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tlo = TLO_EKRANU_GLOWNEGO.instantiate()
+	# Board plates drifting across the background. Menu only - in a match the
+	# same background sits behind a board made of these, and a second set
+	# floating over it would blur what is actually playable.
+	tlo.floating_tiles = true
 	add_child(tlo)
 	_build_signs()
 	nickname_input.text = PozycjaOsobista.nickname
