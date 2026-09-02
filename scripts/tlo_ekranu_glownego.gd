@@ -77,6 +77,20 @@ const LAYERS := [
 # MIN is the lever for how dark the background FEELS, because it is where the
 # breath spends half its time. Raise it if the dim end is the problem; raising
 # MAX does nothing for it.
+# A slow drift of the camera, which is what turns the depth already in this
+# scene into something you can see. Nothing else here moves the viewpoint, and
+# without that a 3D scene and a flat painting produce identical pixels - the
+# curvature alone reads as a gradient, not as space.
+#
+# The sheets are very unevenly spaced (4, 8.5 and 20 units out), so one shift
+# of the camera moves the nearest one about five times as far across the frame
+# as the furthest. That difference IS the depth cue.
+#
+# It costs cap: the coverage check has to be run from the camera's extremes,
+# not from the origin, or an edge swings into frame at the ends of the drift.
+const CAMERA_DRIFT := Vector2(0.25, 0.17) # world units, horizontal and vertical
+const CAMERA_RATE := Vector2(0.13, 0.095) # radians per second - about 48s and 66s
+
 const PULSE_LAYER := 1
 const PULSE_PERIOD := 86.0 # seconds for a full brighten-and-dim
 const PULSE_MIN := 0.35
@@ -96,6 +110,7 @@ var target_tint := Color.WHITE
 var tint := Color.WHITE
 var container: SubViewportContainer
 var viewport: SubViewport
+var camera: Camera3D
 var sheets: Array[MeshInstance3D] = []
 var materials: Array[StandardMaterial3D] = []
 var _time := 0.0
@@ -120,7 +135,7 @@ func _build() -> void:
 	container.add_child(viewport)
 	Viewport3D.setup(viewport)
 
-	var camera := Camera3D.new()
+	camera = Camera3D.new()
 	camera.fov = FOV
 	camera.current = true
 	camera.far = 200.0
@@ -210,6 +225,11 @@ func _fit_to_viewport() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	if camera != null:
+		camera.position = Vector3(
+			sin(_time * CAMERA_RATE.x) * CAMERA_DRIFT.x,
+			sin(_time * CAMERA_RATE.y) * CAMERA_DRIFT.y,
+			0.0)
 	tint = tint.lerp(target_tint, minf(delta * 3.0, 1.0))
 	# The old flat layers kept this: a long, slow ramp that drives the middle
 	# layer far past white before snapping back, with the alpha breathing under
