@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://btmkpyyq662h7"
+path="res://.godot/imported/test_pionek.obj-b593d58d7ad8f5b89c8757a92312757d.mesh"
+
+[deps]
+
+files=["res://.godot/imported/test_pionek.obj-b593d58d7ad8f5b89c8757a92312757d.mesh"]
+
+source_file="res://assets/modele/test_pionek.obj"
+dest_files=["res://.godot/imported/test_pionek.obj-b593d58d7ad8f5b89c8757a92312757d.mesh", "res://.godot/imported/test_pionek.obj-b593d58d7ad8f5b89c8757a92312757d.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false
