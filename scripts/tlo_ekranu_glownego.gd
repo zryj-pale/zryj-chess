@@ -81,7 +81,13 @@ const PULSE_LAYER := 1
 const PULSE_PERIOD := 86.0 # seconds for a full brighten-and-dim
 const PULSE_MIN := 0.35
 const PULSE_MAX := 40.0
-const PULSE_FLUTTER := 2.0 # the faster alpha breathing, radians per second
+# The middle layer's opacity breathes too, and this is the ONE fast thing in
+# the whole background - everything else here cycles in 71 to 217 seconds. At
+# 2.0 rad/s it swung 0.6 to 1.0 every three seconds, which alternately hid the
+# sheet behind it and let it through: that is what read as the layers punching
+# through each other, and no amount of slowing the brightness touched it.
+const PULSE_FLUTTER := 0.34 # radians per second, so about an 18-second cycle
+const PULSE_FLUTTER_DEPTH := 0.12 # how far the alpha swings either side of 0.8
 const FOV := 45.0
 const CAP_SEGMENTS := 40 # enough that the bulge is smooth rather than faceted
 const TEXTURE_ASPECT := 16.0 / 9.0
@@ -223,7 +229,7 @@ func _process(delta: float) -> void:
 		var brightness := 1.0
 		if i == PULSE_LAYER:
 			brightness = lerpf(PULSE_MIN, PULSE_MAX, 0.5 - 0.5 * cos(TAU * _time / PULSE_PERIOD))
-			alpha = 0.8 + sin(_time * PULSE_FLUTTER) * 0.2
+			alpha = 0.8 + sin(_time * PULSE_FLUTTER) * PULSE_FLUTTER_DEPTH
 		materials[i].albedo_color = Color(tint.r * brightness, tint.g * brightness, tint.b * brightness, alpha)
 
 func set_match_tint(value: Color) -> void:
