@@ -85,6 +85,25 @@ const TILE_FILL_ENERGY := 0.30
 const TILE_LAMP_ENERGY := 2.4
 const TILE_LAMP_SPAN := 13.0
 
+# The same disruption shader the menu signs wear, at roughly a fifth of the
+# strength. It has to go on the whole background rather than on the plates
+# alone: they share a viewport with the artwork sheets and are interleaved in
+# depth with them, which a separate viewport would flatten. That costs nothing
+# in practice, because the sheets have no hard edges for a pixel grid to bite
+# on - the effect only really shows on the plates.
+#
+# BLOCK is deliberately the same size as on the signs, so the two grids agree;
+# what is dialled down is how much of the block survives (SOFTNESS) and every
+# disturbance on top of it. TINT stays white - the signs use it to go blue, and
+# doing that here would recolour the whole background.
+const FX_SHADER := preload("res://shaders/napisy_zaklocenie.gdshader")
+const FX_BLOCK := 1.7
+const FX_SOFTNESS := 0.89
+const FX_RGB_SPLIT := 0.10
+const FX_SCANLINE := 0.032
+const FX_GRAIN := 0.02
+const FX_TEAR := 0.11
+
 const PULSE_LAYER := 1 # the middle layer keeps the old brightness ramp
 const FOV := 45.0
 const CAP_SEGMENTS := 40 # enough that the bulge is smooth rather than faceted
@@ -120,6 +139,15 @@ func _build() -> void:
 	container.name = "BackgroundViewportContainer"
 	container.stretch = true
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fx := ShaderMaterial.new()
+	fx.shader = FX_SHADER
+	fx.set_shader_parameter("softness", FX_SOFTNESS)
+	fx.set_shader_parameter("rgb_split", FX_RGB_SPLIT)
+	fx.set_shader_parameter("scanline", FX_SCANLINE)
+	fx.set_shader_parameter("grain", FX_GRAIN)
+	fx.set_shader_parameter("tear", FX_TEAR)
+	fx.set_shader_parameter("tint", Color.WHITE)
+	container.material = fx
 	add_child(container)
 
 	viewport = SubViewport.new()
@@ -288,7 +316,12 @@ func _build_material(index: int, layer: Dictionary) -> StandardMaterial3D:
 # window, so a SubViewport sized in those units renders at a fraction of the
 # real resolution - see Viewport3D.fit_to_pixels().
 func _fit_to_viewport() -> void:
-	Viewport3D.fit_to_pixels(container, Rect2(Vector2.ZERO, get_viewport_rect().size))
+	var factor := Viewport3D.fit_to_pixels(container, Rect2(Vector2.ZERO, get_viewport_rect().size))
+	# The shader counts in texels of a viewport rendered at real pixels, so the
+	# block has to be converted out of 2D units or the grid would get finer the
+	# bigger the window.
+	if container.material is ShaderMaterial:
+		(container.material as ShaderMaterial).set_shader_parameter("block_size", FX_BLOCK * factor)
 
 func _process(delta: float) -> void:
 	_time += delta

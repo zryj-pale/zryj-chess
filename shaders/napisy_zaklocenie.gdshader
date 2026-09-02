@@ -1,11 +1,15 @@
 shader_type canvas_item;
 
-// Roughs up the menu signs so they stop looking injection-moulded.
+// Roughs up 3D content so it stops looking injection-moulded. Used twice, at
+// very different strengths: hard on the menu signs, and faintly on the
+// background behind them.
 //
-// This runs on the SubViewportContainer that displays the signs, not on the
-// signs themselves, so it works on the finished image - which is the only
-// place a pixel grid and a horizontal tear can exist at all - and leaves the
-// background and the 2D title completely alone.
+// It runs on the SubViewportContainer displaying that content, not on the
+// content itself, because a pixel grid and a horizontal tear only exist on a
+// finished image. On the background that means the artwork sheets go through
+// it as well as the drifting plates - they cannot be separated, being
+// interleaved in depth with each other - but the sheets are soft blobs with no
+// hard edges, so in practice the grid only reads on the plates.
 //
 // Sizes are in TEXELS of that viewport, which is rendered at real screen
 // pixels (Viewport3D.fit_to_pixels), so menu_glowne.gd scales `block_size`
