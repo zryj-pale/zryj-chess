@@ -46,8 +46,15 @@ const LAYER_TEXTURES := [
 # makes it read as three separate spheres rather than one surface. Moving a
 # pole off centre costs cap: the far side of the frame is then further round
 # the sphere, so `half_angle` has to grow with the offset.
+#
+# The depth RANGES each sheet's surface occupies must not overlap. Nothing here
+# writes depth - render_priority alone fixes the order - so where two sheets
+# interpenetrate the nearer one is still drawn under the further one, and one
+# visibly punches through the other at the rims. The back sheet sits at 20
+# rather than 16 for exactly this: at 16 its surface began before the middle
+# sheet's had ended.
 const LAYERS := [
-	{"radius": 60.0, "distance": 16.0, "half_angle": 27.0, "alpha": 0.56,
+	{"radius": 60.0, "distance": 20.0, "half_angle": 34.0, "alpha": 0.56,
 		"apex": Vector2(-0.42, 0.26), "sway": Vector2(0.055, 0.040), "rate": Vector2(0.041, 0.029)},
 	{"radius": 26.0, "distance": 8.5, "half_angle": 38.0, "alpha": 1.0,
 		"apex": Vector2(0.48, -0.40), "sway": Vector2(0.095, 0.070), "rate": Vector2(0.063, 0.047)},
@@ -71,7 +78,7 @@ const LAYERS := [
 # breath spends half its time. Raise it if the dim end is the problem; raising
 # MAX does nothing for it.
 const PULSE_LAYER := 1
-const PULSE_PERIOD := 72.0 # seconds for a full brighten-and-dim
+const PULSE_PERIOD := 86.0 # seconds for a full brighten-and-dim
 const PULSE_MIN := 0.35
 const PULSE_MAX := 40.0
 const PULSE_FLUTTER := 2.0 # the faster alpha breathing, radians per second
