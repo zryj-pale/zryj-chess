@@ -94,7 +94,7 @@ const CAMERA_RATE := Vector2(0.13, 0.095) # radians per second - about 48s and 6
 const PULSE_LAYER := 1
 const PULSE_PERIOD := 86.0 # seconds for a full brighten-and-dim
 const PULSE_MIN := 0.35
-const PULSE_MAX := 40.0
+const PULSE_MAX := 20.0
 # The middle layer's opacity breathes too, and this is the ONE fast thing in
 # the whole background - everything else here cycles in 71 to 217 seconds. At
 # 2.0 rad/s it swung 0.6 to 1.0 every three seconds, which alternately hid the
