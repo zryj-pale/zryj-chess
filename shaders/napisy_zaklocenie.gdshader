@@ -13,6 +13,12 @@ shader_type canvas_item;
 // the window resolution.
 
 uniform float block_size = 4.0; // pixelation: side of one block, in texels
+// 0 = hard blocks, 1 = no pixelation at all. Softening the grid back toward
+// the unquantised image is what keeps it from reading as a hard mosaic.
+uniform float softness : hint_range(0.0, 1.0) = 0.0;
+// Multiplied over the finished image. The signs are lit and tinted in 3D, and
+// this darkens and cools the result on top of that.
+uniform vec4 tint : source_color = vec4(1.0);
 uniform float rgb_split = 1.5; // channel offset, in texels
 uniform float scanline = 0.15; // 0 = none, 1 = every other row black
 uniform float grain = 0.10; // static per block
@@ -54,6 +60,9 @@ void fragment() {
 	c.g = mid.g;
 	c.b = textureLod(TEXTURE, uv - split, 0.0).b;
 	c.a = mid.a;
+	// Mixing the block back toward the unsnapped pixel takes the edge off the
+	// grid without losing it.
+	c = mix(c, textureLod(TEXTURE, UV, 0.0), softness);
 
 	float line = 1.0 - scanline * step(0.5, fract(uv.y / (block.y * 2.0)));
 	float n = (hash(floor(uv / block) + vec2(step_time, 0.0)) - 0.5) * grain;
@@ -66,5 +75,5 @@ void fragment() {
 	// (letters at 118 against 175 with no shader at all, with every effect
 	// switched off). Nothing sets modulate on this container, so there is
 	// nothing to fold in anyway.
-	COLOR = c;
+	COLOR = c * tint;
 }

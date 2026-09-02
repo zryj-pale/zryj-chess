@@ -40,11 +40,16 @@ const SIGN_EDGE_MARGIN := 0.35 # world units the longest word keeps clear of the
 # BLOCK is in 2D units and scaled to real pixels at runtime, so the blocks stay
 # the same apparent size on any resolution.
 const SIGN_DISRUPTION := preload("res://shaders/napisy_zaklocenie.gdshader")
-const SIGN_BLOCK := 2.6
+const SIGN_BLOCK := 1.7
+const SIGN_SOFTNESS := 0.45
 const SIGN_RGB_SPLIT := 0.5
 const SIGN_SCANLINE := 0.16
 const SIGN_GRAIN := 0.10
 const SIGN_TEAR := 0.55
+# Darkens and cools the signs on top of whatever colour the nickname gave
+# them. Weighted toward blue, which is what the first pass of this shader
+# happened to do by accident and what it was kept for.
+const SIGN_TINT := Color(0.52, 0.55, 0.76)
 const SIGNS_Z_INDEX := 4 # above the animated background, below the intro video and the nickname field
 
 var tlo = null
@@ -88,6 +93,8 @@ func _build_signs() -> void:
 	# scrambling the image cannot make a menu entry harder to click.
 	var disruption := ShaderMaterial.new()
 	disruption.shader = SIGN_DISRUPTION
+	disruption.set_shader_parameter("softness", SIGN_SOFTNESS)
+	disruption.set_shader_parameter("tint", SIGN_TINT)
 	disruption.set_shader_parameter("rgb_split", SIGN_RGB_SPLIT)
 	disruption.set_shader_parameter("scanline", SIGN_SCANLINE)
 	disruption.set_shader_parameter("grain", SIGN_GRAIN)
