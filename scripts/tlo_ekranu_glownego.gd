@@ -59,11 +59,20 @@ const LAYERS := [
 # these very plates, and a second set floating over it would only confuse what
 # is playable. The menu switches them on.
 const TILE_COUNT := 14
-const TILE_DEPTH := Vector2(2.0, 3.6) # distance in front of the camera, near..far
-const TILE_SIZE := Vector2(0.20, 0.44)
-const TILE_DRIFT := Vector2(0.012, 0.05) # units per second
-const TILE_SPIN := 0.10 # max radians per second, in the plane of the screen
-const TILE_MARGIN := 0.6 # how far past the edge a plate goes before it wraps
+# Deep enough to sit AMONG the sheets rather than in front of them: the front
+# sheet's pole is 4.0 away and the middle one 8.5, so plates in this range pass
+# behind the first and in front of the second. That is what puts them in the
+# background instead of over it - and it works because the sheets test depth
+# without writing it, so a solid plate simply occludes the ones behind it.
+const TILE_DEPTH := Vector2(5.0, 10.5)
+const TILE_SIZE := Vector2(0.6, 0.95)
+const TILE_DRIFT := Vector2(0.010, 0.045) # units per second
+const TILE_SPIN := Vector2(0.02, 0.09) # radians per second, about each plate own axis
+const TILE_MARGIN := 0.8 # how far past the edge a plate goes before it wraps
+# Placed one per cell of this grid rather than at free random. Fourteen
+# independent draws clump badly - the first attempt put nearly all of them in
+# one corner - and a plate that has drifted away leaves its cell empty anyway.
+const TILE_GRID := Vector2i(5, 3)
 
 const PULSE_LAYER := 1 # the middle layer keeps the old brightness ramp
 const FOV := 45.0
@@ -145,20 +154,27 @@ func _build_tiles() -> void:
 	_tile_root.name = "FloatingTiles"
 	viewport.add_child(_tile_root)
 	BoardTile.setup_board(viewport, _tile_root)
-	BoardTile.focus_lighting(_tile_root, Vector3(0.0, 0.0, -TILE_DEPTH.y), 2.5)
+	BoardTile.focus_lighting(_tile_root, Vector3(0.0, 0.0, -(TILE_DEPTH.x + TILE_DEPTH.y) * 0.5), 5.0)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260902 # fixed, so the scatter is the same every launch
+	var cells := range(TILE_GRID.x * TILE_GRID.y)
+	cells.shuffle() # so consecutive plates are not neighbours in the grid
 	for i in range(TILE_COUNT):
+		var cell: int = cells[i]
 		var depth := rng.randf_range(TILE_DEPTH.x, TILE_DEPTH.y)
 		var half := _visible_half(depth)
+		# One plate per grid cell, jittered inside it. Spread is measured across
+		# the SCREEN, not in world units, so plates at different depths still
+		# come out evenly distributed in frame.
+		var u := (float(cell % TILE_GRID.x) + rng.randf()) / float(TILE_GRID.x) * 2.0 - 1.0
+		var v := (float(cell / TILE_GRID.x) + rng.randf()) / float(TILE_GRID.y) * 2.0 - 1.0
 		var holder := Node3D.new()
-		holder.position = Vector3(
-			rng.randf_range(-half.x, half.x),
-			rng.randf_range(-half.y, half.y),
-			-depth)
-		# -90 degrees about X stands the plate up: BoardTile builds it lying
-		# flat with its face pointing up, which this camera would see edge-on.
-		holder.rotation = Vector3(-PI * 0.5, 0.0, rng.randf_range(0.0, TAU))
+		holder.position = Vector3(u * half.x, v * half.y, -depth)
+		# Fully random orientation. Standing every plate square to the camera
+		# made a row of identical rectangles; tumbled, they catch the light
+		# differently and some pass edge-on, which is what sells them as
+		# objects rather than cards.
+		holder.rotation = Vector3(rng.randf_range(0.0, TAU), rng.randf_range(0.0, TAU), rng.randf_range(0.0, TAU))
 		var tile := BoardTile.create(Vector2i(i, 0), Vector3.ZERO, rng.randf_range(TILE_SIZE.x, TILE_SIZE.y), i % 2 == 0)
 		holder.add_child(tile)
 		_tile_root.add_child(holder)
@@ -167,7 +183,10 @@ func _build_tiles() -> void:
 		_tiles.append({
 			"holder": holder,
 			"velocity": Vector2(cos(angle), sin(angle)) * speed,
-			"spin": rng.randf_range(-TILE_SPIN, TILE_SPIN),
+			# A fixed random axis rather than per-axis Euler rates: turning about
+			# one axis stays a steady tumble instead of wandering into gimbal.
+			"axis": Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)).normalized(),
+			"spin": rng.randf_range(TILE_SPIN.x, TILE_SPIN.y) * (1.0 if rng.randf() < 0.5 else -1.0),
 		})
 
 # Half the world extent the camera can see at `depth` in front of it.
@@ -274,7 +293,7 @@ func _drift_tiles(delta: float) -> void:
 		var holder: Node3D = entry["holder"]
 		var velocity: Vector2 = entry["velocity"]
 		holder.position += Vector3(velocity.x, velocity.y, 0.0) * delta
-		holder.rotation.z += float(entry["spin"]) * delta
+		holder.rotate(entry["axis"], float(entry["spin"]) * delta)
 		var limit := _visible_half(absf(holder.position.z)) + Vector2.ONE * TILE_MARGIN
 		if absf(holder.position.x) > limit.x:
 			holder.position.x = -sign(holder.position.x) * limit.x
