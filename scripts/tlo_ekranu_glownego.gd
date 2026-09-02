@@ -92,14 +92,19 @@ const TILE_LAMP_SPAN := 13.0
 # round. A cosine covers the same range and never jumps, so there is no seam
 # to see.
 #
-# And it used to ramp to 100, which multiplies every channel so far past white
-# that any colour is gone long before the top. MAX is now low enough that the
-# darker channels of a tint stay under 1 while the brightest saturates, which
-# is what keeps a hue visible at the peak instead of a white screen.
+# MAX is a deliberate blow-out. Past about 1.9 a typical nickname colour has
+# every channel over 1 and the peak of the breath is white; at 50 it is white
+# for a good stretch either side of the peak too. That is the look that was
+# wanted - the smooth rise and fall is what the cosine is for, not a limit on
+# how bright it gets.
+#
+# MIN is the lever for how dark the background FEELS, because it is where the
+# breath spends half its time. Raise it if the dim end is the problem; raising
+# MAX does nothing for it.
 const PULSE_LAYER := 1
 const PULSE_PERIOD := 46.0 # seconds for a full brighten-and-dim
 const PULSE_MIN := 0.35
-const PULSE_MAX := 1.15
+const PULSE_MAX := 50.0
 const PULSE_FLUTTER := 2.0 # the faster alpha breathing, radians per second
 const FOV := 45.0
 const CAP_SEGMENTS := 40 # enough that the bulge is smooth rather than faceted
