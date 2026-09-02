@@ -35,6 +35,11 @@ const RATE_ROLL := 0.61
 const HOVER_LIFT := 0.28
 const HOVER_SCALE := 1.14
 const HOVER_LERP := 12.0
+# How many world units one repeat of the plastic texture covers, as a
+# multiplier - larger means finer grain. The board gets roughly one repeat per
+# 3.8 units, which on letters this small would come out as blur rather than
+# texture, so the signs run it finer.
+const TEXTURE_SCALE := 0.6
 const EMISSION_IDLE := 0.18
 const EMISSION_HOVER := 0.95
 # A word is a row of separate letters with gaps between them, so a hit test
@@ -156,14 +161,28 @@ func _process(delta: float) -> void:
 
 static func _build_material() -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
+	# The same plastic the board is made of - taken from BoardTile rather than
+	# by path, so re-texturing the tiles re-textures the menu with them.
+	material.albedo_texture = BoardTile.TEXTURE_LIGHT
 	material.albedo_color = Color(0.92, 0.92, 0.94)
-	material.roughness = 0.32
-	material.metallic = 0.15
+	# TRIPLANAR, because these models carry Blender's default text UVs: u runs
+	# around each letter's outline and v is only ever 0 or 1, so sampling by
+	# them would smear the texture along the contours. Triplanar projects it
+	# through object space instead and needs no UVs at all - which also means
+	# the extruded sides get the same grain as the faces.
+	material.uv1_triplanar = true
+	material.uv1_scale = Vector3.ONE * TEXTURE_SCALE
+	# Matte, like the tiles: same texture, same surface.
+	material.roughness = 1.0
+	material.metallic = 0.0
+	material.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	# The menu's animated background is busy and changes colour with the
 	# player's nickname, so the signs carry their own glow rather than relying
 	# on contrast against whatever is behind them at the time.
 	material.emission_enabled = true
 	material.emission = Color.WHITE
+	material.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
+	material.emission_texture = material.albedo_texture
 	material.emission_energy_multiplier = EMISSION_IDLE
 	return material
 
