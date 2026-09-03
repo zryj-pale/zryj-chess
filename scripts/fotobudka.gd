@@ -98,7 +98,14 @@ var _kamera: Camera3D
 
 var _modele: PackedStringArray = []
 var _indeks := 0
+var _tekstura: Texture2D = null
 var _tekstura_nazwa := ""
+var _format_pliku := ""
+var _ma_uv := false
+var _triplanar := false
+var _skala_tekstury := 1.0
+var _rozmiar_modelu := 1.0 # largest raw dimension, for the triplanar scale
+var _surowe_pudlo := AABB() # model bounds before any fix, for re-guessing on reset
 
 var _pochylenie := POCHYLENIE
 var _obrot := 0.0
@@ -223,7 +230,9 @@ func _wczytaj_model() -> void:
 	for dziecko in _ustawienie.get_children():
 		dziecko.queue_free()
 		_ustawienie.remove_child(dziecko)
+	_tekstura = null
 	_tekstura_nazwa = ""
+	_format_pliku = ""
 	_szerokosc_modelu = 0.0
 
 	var nazwa := _nazwa_modelu()
@@ -258,10 +267,46 @@ func _wczytaj_model() -> void:
 		return
 
 	_ustawienie.add_child(wezel)
-	_nalozy_material(wezel, _znajdz_teksture(nazwa))
+	_surowe_pudlo = _aabb_dzieci(_ustawienie)
+	_rozmiar_modelu = maxf(_surowe_pudlo.size.x, maxf(_surowe_pudlo.size.y, _surowe_pudlo.size.z))
+	_ma_uv = _ma_wspolrzedne_uv(wezel)
+	if not _ustawienia_maja(nazwa, "os"):
+		_os = _zgadnij_os(_surowe_pudlo)
+	if not _ustawienia_maja(nazwa, "triplanar"):
+		# Without UVs there is nothing for an albedo texture to follow: every
+		# vertex samples (0, 0) and the model comes out one flat colour. That
+		# is what "the png does not load" looks like. Tinkercad and most CAD
+		# exporters never write UVs, so this is the common case, not the odd one.
+		_triplanar = not _ma_uv
+	_tekstura = _znajdz_teksture(nazwa)
+	_nalozy_material(wezel)
 	_ustaw_model()
 	_komunikat = ""
 	_odswiez_hud()
+
+
+# Which way is up. Chess pieces are tallest along their own axis, and CAD
+# exporters disagree about whether that is Y or Z (Tinkercad writes Z-up and
+# rests the model on z = 0), so the longer of the two wins. X-up does not
+# happen in practice; the X key is there for whatever this gets wrong.
+func _zgadnij_os(pudlo: AABB) -> int:
+	return 1 if pudlo.size.z > pudlo.size.y else 0
+
+
+func _ma_wspolrzedne_uv(wezel: Node) -> bool:
+	if wezel is MeshInstance3D:
+		var siatka := (wezel as MeshInstance3D).mesh
+		if siatka != null:
+			for i in siatka.get_surface_count():
+				var tablice := siatka.surface_get_arrays(i)
+				if tablice.size() > Mesh.ARRAY_TEX_UV:
+					var uv = tablice[Mesh.ARRAY_TEX_UV]
+					if uv != null and uv.size() > 0:
+						return true
+	for dziecko in wezel.get_children():
+		if _ma_wspolrzedne_uv(dziecko):
+			return true
+	return false
 
 
 # The texture is paired by name rather than configured, so dropping krol.obj
@@ -269,32 +314,87 @@ func _wczytaj_model() -> void:
 # ignores the .mtl's maps anyway, so the material is built here regardless.
 func _znajdz_teksture(nazwa: String) -> Texture2D:
 	var baza := nazwa.get_basename()
-	for rozszerzenie in ROZSZERZENIA_TEKSTUR:
-		var sciezka := KATALOG_MODELI.path_join("%s.%s" % [baza, rozszerzenie])
-		if ResourceLoader.exists(sciezka):
-			_tekstura_nazwa = sciezka.get_file()
-			return load(sciezka)
 	var katalog := DirAccess.open(KATALOG_MODELI)
-	if katalog != null:
-		for plik in katalog.get_files():
-			if plik.ends_with(".import") or plik.ends_with(".remap"):
-				continue
-			if not ROZSZERZENIA_TEKSTUR.has(plik.get_extension().to_lower()):
-				continue
-			if not plik.get_basename().begins_with(baza):
-				continue
-			var sciezka := KATALOG_MODELI.path_join(plik)
-			if ResourceLoader.exists(sciezka):
-				_tekstura_nazwa = plik
-				return load(sciezka)
+	if katalog == null:
+		return null
+	var kandydaci: PackedStringArray = []
+	for plik in katalog.get_files():
+		if plik.ends_with(".import") or plik.ends_with(".remap"):
+			continue
+		if not ROZSZERZENIA_TEKSTUR.has(plik.get_extension().to_lower()):
+			continue
+		if plik.get_basename() == baza:
+			kandydaci.insert(0, plik) # exact name wins over krol_albedo.png
+		elif plik.get_basename().begins_with(baza):
+			kandydaci.append(plik)
+	for plik in kandydaci:
+		var obraz := _wczytaj_obraz(KATALOG_MODELI.path_join(plik))
+		if obraz == null:
+			continue
+		_tekstura_nazwa = plik
+		if _format_pliku != plik.get_extension().to_lower():
+			_tekstura_nazwa += " (to naprawde %s!)" % _format_pliku.to_upper()
+		# The render is supersampled 8x, so the texture is minified hard; with
+		# no mipmaps that turns fine detail into shimmer.
+		obraz.generate_mipmaps()
+		return ImageTexture.create_from_image(obraz)
 	return null
 
 
-func _nalozy_material(wezel: Node, tekstura: Texture2D) -> void:
+# Reads an image straight off disk instead of through load(), for two reasons.
+# One, it means a texture dropped into the folder works on the next F, with no
+# reimport - the loop while dialling a piece in is fast. Two, and this is what
+# actually bit: files arrive with the wrong extension. A .png saved from a
+# browser is often really a WebP, Godot's importer marks it valid=false, and
+# load() then fails with nothing on screen to explain why. Sniffing the magic
+# bytes loads it anyway and lets the readout say what the file really is.
+func _wczytaj_obraz(sciezka: String) -> Image:
+	var plik := FileAccess.open(sciezka, FileAccess.READ)
+	if plik == null:
+		return null
+	var dane := plik.get_buffer(plik.get_length())
+	plik.close()
+	if dane.size() < 12:
+		return null
+	var obraz := Image.new()
+	var kolejnosc: Array[String] = []
+	if dane[0] == 0x89 and dane[1] == 0x50:
+		kolejnosc = ["png"]
+	elif dane[0] == 0xFF and dane[1] == 0xD8:
+		kolejnosc = ["jpg"]
+	elif dane.slice(0, 4).get_string_from_ascii() == "RIFF" and dane.slice(8, 12).get_string_from_ascii() == "WEBP":
+		kolejnosc = ["webp"]
+	elif dane[0] == 0x42 and dane[1] == 0x4D:
+		kolejnosc = ["bmp"]
+	else:
+		kolejnosc = ["png", "jpg", "webp", "bmp", "tga"] # unknown magic - just try
+	for format in kolejnosc:
+		var blad := ERR_FILE_UNRECOGNIZED
+		match format:
+			"png": blad = obraz.load_png_from_buffer(dane)
+			"jpg": blad = obraz.load_jpg_from_buffer(dane)
+			"webp": blad = obraz.load_webp_from_buffer(dane)
+			"bmp": blad = obraz.load_bmp_from_buffer(dane)
+			"tga": blad = obraz.load_tga_from_buffer(dane)
+		if blad == OK:
+			_format_pliku = "jpg" if format == "jpeg" else format
+			return obraz
+	return null
+
+
+func _nalozy_material(wezel: Node) -> void:
 	if wezel is MeshInstance3D:
 		var material := StandardMaterial3D.new()
-		if tekstura != null:
-			material.albedo_texture = tekstura
+		if _tekstura != null:
+			material.albedo_texture = _tekstura
+			if _triplanar:
+				# Projects the texture from the three axes and blends by normal,
+				# so a model with no UVs still gets one. Scaled off the model's
+				# own size (triplanar reads local vertex positions, and these
+				# arrive in whatever units the exporter used) so that by default
+				# the texture spans the piece once instead of tiling 26 times.
+				material.uv1_triplanar = true
+				material.uv1_scale = Vector3.ONE * (_skala_tekstury / maxf(_rozmiar_modelu, 0.0001))
 		else:
 			material.albedo_color = Color(0.72, 0.70, 0.66)
 		material.roughness = 1.0
@@ -308,7 +408,7 @@ func _nalozy_material(wezel: Node, tekstura: Texture2D) -> void:
 		material.cull_mode = BaseMaterial3D.CULL_DISABLED
 		wezel.material_override = material
 	for dziecko in wezel.get_children():
-		_nalozy_material(dziecko, tekstura)
+		_nalozy_material(dziecko)
 
 
 # ------------------------------------------------------------------- framing
@@ -422,13 +522,29 @@ func _unhandled_input(zdarzenie: InputEvent) -> void:
 			_ustaw_model()
 			_zapamietaj()
 			_odswiez_hud()
+		KEY_U:
+			_triplanar = not _triplanar
+			_przemaluj()
+		KEY_BRACKETLEFT:
+			_skala_tekstury = maxf(0.05, _skala_tekstury / 1.25)
+			_przemaluj()
+		KEY_BRACKETRIGHT:
+			_skala_tekstury = minf(64.0, _skala_tekstury * 1.25)
+			_przemaluj()
 		KEY_R:
+			# Back to the guessed setup, not just the camera: whatever was
+			# saved for this model is what a bad session leaves behind, and
+			# there has to be a way out of it without editing the json.
 			_obrot = 0.0
 			_pochylenie = POCHYLENIE
+			_wysokosc = WYSOKOSC_STARTOWA
+			_os = _zgadnij_os(_surowe_pudlo)
+			_triplanar = not _ma_uv
+			_skala_tekstury = 1.0
 			_obrotnica.rotation_degrees = Vector3.ZERO
 			_ustaw_kamere()
-			_zapamietaj()
-			_odswiez_hud()
+			_ustaw_model()
+			_przemaluj()
 		KEY_G:
 			_tlo_indeks = (_tlo_indeks + 1) % TLA.size()
 			_tlo.color = TLA[_tlo_indeks]
@@ -442,6 +558,13 @@ func _unhandled_input(zdarzenie: InputEvent) -> void:
 			_zapisz_obrot()
 		KEY_ESCAPE:
 			get_tree().quit()
+
+
+func _przemaluj() -> void:
+	for dziecko in _ustawienie.get_children():
+		_nalozy_material(dziecko)
+	_zapamietaj()
+	_odswiez_hud()
 
 
 func _ustaw_obrot(stopnie: float) -> void:
@@ -575,14 +698,29 @@ func _zastosuj_ustawienia(nazwa: String) -> void:
 	_wysokosc = clampf(float(wpis.get("wysokosc", WYSOKOSC_STARTOWA)), WYSOKOSC_MIN, WYSOKOSC_MAX)
 	_os = int(wpis.get("os", 0)) % OSIE.size()
 	_obrot = fposmod(float(wpis.get("obrot", 0.0)), 360.0)
+	_triplanar = bool(wpis.get("triplanar", false))
+	_skala_tekstury = clampf(float(wpis.get("skala_tekstury", 1.0)), 0.05, 64.0)
 	_obrotnica.rotation_degrees = Vector3(0.0, _obrot, 0.0)
+
+
+# Whether a model has been set up by hand before. Guessed defaults (up axis,
+# triplanar) must not overwrite a choice the user already made and saved.
+func _ustawienia_maja(nazwa: String, klucz: String) -> bool:
+	var wpis = _ustawienia.get(nazwa, {})
+	return wpis is Dictionary and wpis.has(klucz)
 
 
 func _zapamietaj() -> void:
 	var nazwa := _nazwa_modelu()
 	if nazwa.is_empty():
 		return
-	_ustawienia[nazwa] = {"wysokosc": _wysokosc, "os": _os, "obrot": _obrot}
+	_ustawienia[nazwa] = {
+		"wysokosc": _wysokosc,
+		"os": _os,
+		"obrot": _obrot,
+		"triplanar": _triplanar,
+		"skala_tekstury": _skala_tekstury,
+	}
 	_ustawienia["_tlo"] = _tlo_indeks
 	_przygotuj_katalog()
 	var plik := FileAccess.open(PLIK_USTAWIEN, FileAccess.WRITE)
@@ -600,12 +738,19 @@ func _odswiez_hud() -> void:
 	else:
 		wiersze.append("model: %s   (%d/%d)   [Q/E]" % [
 			_nazwa_modelu(), _indeks + 1, _modele.size()])
-		wiersze.append("tekstura: %s" % (_tekstura_nazwa if not _tekstura_nazwa.is_empty() else "brak - szary material"))
+		if _tekstura_nazwa.is_empty():
+			wiersze.append("tekstura: brak - szary material")
+		else:
+			var mapowanie := "triplanar %.2fx  [U, nawiasy]" % _skala_tekstury if _triplanar else "UV z modelu   [U]"
+			wiersze.append("tekstura: %s   (%s)" % [_tekstura_nazwa, mapowanie])
+			if not _ma_uv and not _triplanar:
+				wiersze.append("UWAGA: model nie ma UV - bez triplanar (U) wyjdzie jednolity kolor")
 		wiersze.append("wysokosc: %.2f kratki   [kolko myszy / +-]" % _wysokosc)
 		wiersze.append("obrot: %.0f%s   [przeciagnij LPM / <- ->]" % [_obrot, char(0x00B0)])
 		wiersze.append("pochylenie: %.0f%s%s   [gora/dol, R = reset]" % [
 			_pochylenie, char(0x00B0),
 			"  = kat planszy" if is_equal_approx(_pochylenie, POCHYLENIE) else "  UWAGA: plansza ma %.0f" % POCHYLENIE])
+		wiersze.append("   (R = ustaw wszystko od nowa)")
 		wiersze.append("os pionowa: %+.0f%s   [X]" % [OSIE[_os], char(0x00B0)])
 		wiersze.append("kadr: %.0fx%.0f kratki  ->  sprite %dx%d px" % [
 			KRATKA, KADR_WYS, SPRITE, SPRITE_WYS])
@@ -615,6 +760,7 @@ func _odswiez_hud() -> void:
 			wiersze.append("UWAGA: model jest wyzszy niz kadr (%.2f kratki)" % KADR_GORA)
 	wiersze.append("")
 	wiersze.append("S = zapisz sprite    T = pelny obrot    G = tlo    F = odswiez katalog    Esc = wyjscie")
+	wiersze.append("U = mapowanie tekstury    [ ] = skala tekstury")
 	if not _komunikat.is_empty():
 		wiersze.append(_komunikat)
 	_etykieta.text = "\n".join(wiersze)
