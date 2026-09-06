@@ -43,8 +43,9 @@ const NAZWY = {
 
 func _ready() -> void:
 	$tekstura.region_rect = WSPOLRZEDNE_SPRITE[NAZWY[typ+kolor]]
-
+	$tekstura.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 
 func promocja(typ_figury):
 	typ = typ_figury
 	$tekstura.region_rect = WSPOLRZEDNE_SPRITE[NAZWY[typ+kolor]]
+	$tekstura.billboard = BaseMaterial3D.BILLBOARD_ENABLED
