@@ -1,9 +1,9 @@
 {
-	"_tlo": 0,
+	"_tlo": 2,
 	"skoczek.obj": {
-		"obrot": 309.376294970512,
+		"obrot": 24.376294970512,
 		"os": 1,
-		"skala_tekstury": 1.0,
+		"skala_tekstury": 0.922337203685478,
 		"triplanar": true,
 		"wysokosc": 0.62
 	}
