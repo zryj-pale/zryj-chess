@@ -1,17 +1,27 @@
-[gd_scene load_steps=2 format=3 uid="uid://dkgll8f2miyi3"]
+[gd_scene format=3 uid="uid://dkgll8f2miyi3"]
 
 [ext_resource type="Script" uid="uid://bit5s7pj2bptd" path="res://scripts/figura.gd" id="1_ce6ih"]
 [ext_resource type="Texture2D" uid="uid://pmmv8mnh5u1h" path="res://assets/pionkler.png" id="2_yw1en"]
+[ext_resource type="PackedScene" uid="uid://cer741o6h8c5u" path="res://models/Skoczek_punkt.glb" id="3_yw1en"]
+[ext_resource type="Material" uid="uid://t77fjp63cdq0" path="res://assets/pixelfigury.tres" id="4_y8viw"]
 
-[node name="Figura" type="Node3D"]
+[node name="Figura" type="Node3D" unique_id=1012852663]
 script = ExtResource("1_ce6ih")
 
-[node name="tekstura" type="Sprite3D" parent="."]
-texture_filter = 0
-billboard = 2
-shaded = false
-alpha_cut = 1
+[node name="tekstura" type="Sprite3D" parent="." unique_id=233489640]
 pixel_size = 0.015625
+billboard = 2
+alpha_cut = 1
+texture_filter = 0
 texture = ExtResource("2_yw1en")
 region_enabled = true
 region_rect = Rect2(320, 64, 64, 64)
+
+[node name="Skoczek_punkt" parent="." unique_id=315203469 instance=ExtResource("3_yw1en")]
+transform = Transform3D(0.04, 0, 0, 0, 0.04, 0, 0, 0, 0.04, 0, 0, 0)
+
+[node name="Mesh_Mesh_head_geo_001_lambert2SG_001" parent="Skoczek_punkt" index="0" unique_id=836017925]
+transform = Transform3D(1, 0, 0, 0, -3.5762778e-07, 0.9999997, 0, -0.9999997, -3.5762778e-07, 0.19004154, 0.31952053, 0.12785518)
+surface_material_override/0 = ExtResource("4_y8viw")
+
+[editable path="Skoczek_punkt"]
