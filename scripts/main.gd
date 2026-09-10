@@ -86,6 +86,9 @@ func _ready() -> void:
 	_add_menu_background()
 	_init_tile_materials()
 	BoardTile.setup_board(board_viewport, board_root)
+	var figury_viewport: SubViewport = board_viewport.get_node("FiguryViewport")
+	($Figury as WarstwaFigur).setup(board_viewport, camera, board_container,
+		figury_viewport, figury_viewport.get_node("Kamera"))
 	generacja_pol(6)
 	_on_window_resized()
 	get_viewport().size_changed.connect(_on_window_resized)
@@ -863,6 +866,9 @@ func _spawn_hint(pole: Vector2i, material: StandardMaterial3D) -> void:
 	mesh.size = Vector2(HINT_SIZE, HINT_SIZE) * TILE_SIZE_3D
 	mesh_instance.mesh = mesh
 	mesh_instance.material_override = material
+	# Hints are unshaded overlays, not objects: letting them cast would drop a
+	# dark square on the plate right under each highlighted move.
+	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# Parented to the tile itself where there is one, so the quad rides along
 	# with the plate's levitation and stays exactly HINT_Y above its top face
 	# instead of sinking into a plate that has drifted up. PLACEMENT hints
@@ -884,11 +890,10 @@ func _spawn_hint(pole: Vector2i, material: StandardMaterial3D) -> void:
 # goes on the sprite child instead, where it is purely visual.
 func _sync_levitation() -> void:
 	for figura in figury:
-		var sprite: Node3D = figura.get_node_or_null("tekstura")
-		if sprite == null:
+		if figura == null:
 			continue
 		# A held piece hangs off the cursor rather than off any one square.
-		sprite.position = Vector3.ZERO if figura == chwycona else _levitation_at(pozycja(figura))
+		figura.ustaw_lewitacje(Vector3.ZERO if figura == chwycona else _levitation_at(pozycja(figura)))
 	if duck_marker != null and duck_marker.visible:
 		duck_marker.position = _piece_position(duck_position) + _levitation_at(duck_position)
 
@@ -907,6 +912,9 @@ func _create_duck_marker() -> void:
 	duck_marker.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
 	duck_marker.shaded = false
 	duck_marker.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	# Same reason as the hints: an unshaded quad has no business casting, and
+	# with a cutout alpha it would cast its whole square, not a duck.
+	duck_marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# The 3D texture-filter enum is not the CanvasItem one - nearest is 0 here.
 	duck_marker.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	duck_marker.pixel_size = (TILE_SIZE_3D / 64.0) * 0.28

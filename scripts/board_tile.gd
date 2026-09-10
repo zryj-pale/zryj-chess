@@ -151,7 +151,13 @@ static func _add_lighting(board_root: Node3D) -> void:
 	key.name = KEY_LIGHT
 	key.rotation_degrees = Vector3(-52.0, -34.0, 0.0)
 	key.light_energy = KEY_ENERGY
-	key.shadow_enabled = false
+	# The key light is the board's only shadow caster. Plates are coplanar, so
+	# they cannot shadow each other in any way that shows; what does show is a
+	# piece standing a tile tall, whose shadow now falls across its square.
+	key.shadow_enabled = true
+	key.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	key.shadow_bias = 0.04
+	key.shadow_normal_bias = 1.0
 	board_root.add_child(key)
 	var fill := DirectionalLight3D.new()
 	fill.name = FILL_LIGHT
@@ -181,6 +187,12 @@ static func focus_lighting(board_root: Node3D, center: Vector3, half_span: float
 	var height := maxf(half_span, 1.0) * LAMP_HEIGHT
 	lamp.position = center + Vector3(0.0, height, 0.0)
 	lamp.omni_range = height * LAMP_REACH
+	# The key light's shadow window has to cover the whole board including the
+	# camera's slant across it, or pieces on the far edge would lose their
+	# shadow; it scales with the board so a 10x10 still fits.
+	var key := board_root.get_node_or_null(KEY_LIGHT) as DirectionalLight3D
+	if key != null:
+		key.directional_shadow_max_distance = maxf(half_span, 1.0) * 6.0
 
 # Colours the board with the two players' mixed colour - the same mix the
 # animated background behind it is tinted with, so board and background read

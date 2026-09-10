@@ -7,6 +7,7 @@
 [ext_resource type="AudioStream" uid="uid://biu1ligyvf2xr" path="res://audio/nope.mp3" id="6_yvm7y"]
 [ext_resource type="AudioStream" uid="uid://dhyk785va0i38" path="res://audio/woof_2.mp3" id="7_gtpla"]
 [ext_resource type="PackedScene" uid="uid://piecemenu01" path="res://scenes/piece_menu.tscn" id="8_menu"]
+[ext_resource type="Script" path="res://scripts/warstwa_figur.gd" id="figury_script"]
 
 [node name="Node2D" type="Node2D" unique_id=630206519]
 script = ExtResource("1_5fy12")
@@ -22,6 +23,15 @@ handle_input_locally = false
 size = Vector2i(2, 2)
 render_target_update_mode = 4
 
+[node name="FiguryViewport" type="SubViewport" parent="BoardViewportContainer/BoardViewport" unique_id=1572059338]
+transparent_bg = true
+handle_input_locally = false
+size = Vector2i(2, 2)
+render_target_update_mode = 4
+
+[node name="Kamera" type="Camera3D" parent="BoardViewportContainer/BoardViewport/FiguryViewport" unique_id=1946730215]
+current = true
+
 [node name="BoardRoot" type="Node3D" parent="BoardViewportContainer/BoardViewport" unique_id=568037025]
 
 [node name="CameraRig" type="Node3D" parent="BoardViewportContainer/BoardViewport" unique_id=1112011670]
@@ -29,6 +39,12 @@ render_target_update_mode = 4
 [node name="Camera3D" type="Camera3D" parent="BoardViewportContainer/BoardViewport/CameraRig" unique_id=1784044416]
 current = true
 fov = 45.0
+
+[node name="Figury" type="TextureRect" parent="." unique_id=1098442174]
+z_index = 1
+texture_filter = 0
+mouse_filter = 2
+script = ExtResource("figury_script")
 
 [node name="dzwiek" type="Node" parent="." unique_id=1454826686]
 

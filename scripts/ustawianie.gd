@@ -49,6 +49,9 @@ var drag_moved := false
 
 func _ready() -> void:
 	BoardTile.setup_board(board_viewport, board_root)
+	var figury_viewport: SubViewport = board_viewport.get_node("FiguryViewport")
+	($Figury as WarstwaFigur).setup(board_viewport, camera, board_container,
+		figury_viewport, figury_viewport.get_node("Kamera"))
 	generacja_pol(1, 4, 6, 6)
 	_compute_board_bounds()
 	for pole in dostepne_pola:
@@ -305,14 +308,13 @@ func _spawn_tile(pole: Vector2i) -> void:
 # they would stand still while the plate under them floats out from under
 # their feet. A piece's own node position is what pozycja() reads back to tell
 # which square it is on, so that must not be nudged - the drift goes on the
-# sprite child instead, where it is purely visual.
+# figure's contents instead, where it is purely visual.
 func _sync_levitation() -> void:
 	for figura in figury:
-		var sprite: Node3D = figura.get_node_or_null("tekstura")
-		if sprite == null:
+		if figura == null:
 			continue
 		# A dragged piece hangs off the cursor rather than off any one square.
-		sprite.position = Vector3.ZERO if figura == dragged_figure else _levitation_at(pozycja(figura))
+		figura.ustaw_lewitacje(Vector3.ZERO if figura == dragged_figure else _levitation_at(pozycja(figura)))
 
 func _levitation_at(pole: Vector2i) -> Vector3:
 	var tile = tiles.get(pole)

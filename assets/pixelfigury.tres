@@ -6,5 +6,11 @@
 render_priority = 0
 shader = ExtResource("1_8cjhn")
 shader_parameter/albedo_color = Color(0.8, 0.1, 0.1, 1)
-shader_parameter/shade_bands = 2
-shader_parameter/shadow_tint = Color(0.45, 0.45, 0.55, 1)
+shader_parameter/tint = Color(1, 1, 1, 1)
+shader_parameter/use_vertex_color = false
+shader_parameter/shade_bands = 5
+shader_parameter/shadow_tint = Color(0.32, 0.32, 0.4, 1)
+shader_parameter/edge_darken = 0.4
+shader_parameter/bottom_darken = 0.35
+shader_parameter/height_base = 0
+shader_parameter/height_top = 1
