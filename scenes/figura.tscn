@@ -2,8 +2,8 @@
 
 [ext_resource type="Script" uid="uid://bit5s7pj2bptd" path="res://scripts/figura.gd" id="1_ce6ih"]
 [ext_resource type="Texture2D" uid="uid://pmmv8mnh5u1h" path="res://assets/pionkler.png" id="2_yw1en"]
-[ext_resource type="PackedScene" uid="uid://cer741o6h8c5u" path="res://models/Skoczek_punkt.glb" id="3_yw1en"]
-[ext_resource type="Material" uid="uid://t77fjp63cdq0" path="res://assets/pixelfigury.tres" id="4_y8viw"]
+[ext_resource type="PackedScene" path="res://assets/skoczek bialy.glb" id="3_bialy"]
+[ext_resource type="PackedScene" path="res://assets/skoczek czarny.glb" id="4_czarny"]
 
 [node name="Figura" type="Node3D" unique_id=1012852663]
 script = ExtResource("1_ce6ih")
@@ -20,17 +20,18 @@ texture = ExtResource("2_yw1en")
 region_enabled = true
 region_rect = Rect2(64, 0, 64, 64)
 
-[node name="Skoczek_punkt" parent="Zawartosc" unique_id=315203469 instance=ExtResource("3_yw1en")]
+; Dwa modele skoczka - bialy i czarny - roznia sie tylko wbudowana tekstura
+; drewna, wiec o tym, ktory jest widoczny, decyduje kolor figury. Material
+; (shader rozpikselowujacy figure) zaklada im figura.gd, razem z tekstura
+; odczytana z samego modelu.
+[node name="SkoczekBialy" parent="Zawartosc" unique_id=315203469 instance=ExtResource("3_bialy")]
 transform = Transform3D(0.04, 0, 0, 0, 0.04, 0, 0, 0, 0.04, 0, 0, 0)
 
-[node name="Mesh_Mesh_head_geo_001_lambert2SG_001" parent="Zawartosc/Skoczek_punkt" index="0" unique_id=836017925]
-transform = Transform3D(1, 0, 0, 0, -3.5762778e-07, 0.9999997, 0, -0.9999997, -3.5762778e-07, 0.19004154, 0.31952053, 0.12785518)
-surface_material_override/0 = ExtResource("4_y8viw")
-
-; Cien rzuca osobna, nigdy nie rysowana kopia bryły, stojąca na warstwie planszy.
-; Mesh stojący na warstwie figur nie trafia do mapy cieni widoku planszy, bo pass
-; cieni respektuje maskę kamery tej warstwy - a to na kafelkach ma być widać cień.
-[node name="Cien" parent="." unique_id=1304772915 instance=ExtResource("3_yw1en")]
+[node name="SkoczekCzarny" parent="Zawartosc" unique_id=315203470 instance=ExtResource("4_czarny")]
 transform = Transform3D(0.04, 0, 0, 0, 0.04, 0, 0, 0, 0.04, 0, 0, 0)
 
-[editable path="Zawartosc/Skoczek_punkt"]
+; Cien rzuca osobna, nigdy nie rysowana kopia bryły, stojąca na warstwie planszy
+; (SHADOWS_ONLY). Mesh stojący na warstwie figur nie trafiłby do mapy cieni
+; widoku planszy, bo pass cieni respektuje maskę kamery tej warstwy. Kopie buduje
+; figura.gd z aktualnie widocznego modelu, żeby cień zgadzał się z sylwetką.
+[node name="Cien" type="Node3D" parent="Zawartosc" unique_id=1304772915]

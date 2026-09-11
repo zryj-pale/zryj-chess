@@ -37,6 +37,13 @@ render_mode blend_mix, cull_back, specular_disabled, ambient_light_disabled;
 
 uniform vec4 albedo_color : source_color = vec4(0.8, 0.1, 0.1, 1.0);
 
+// Tekstura modelu, jeśli jakąś ma. Modele skoczka (assets/skoczek bialy.glb
+// i skoczek czarny.glb) niosą własne drewno - biały i czarny - i mają UV, więc
+// kolor figury pochodzi z nich, a nie z albedo_color. Bez tekstury zostaje
+// albedo_color, czyli dawny czerwony placeholder.
+uniform bool use_texture = false;
+uniform sampler2D albedo_texture : source_color, hint_default_white;
+
 // Jednolite zabarwienie calego modelu - to samo, co Sprite3D robi ze swoim
 // modulate, tylko dla cieniowanej bryly. Kreator armii podaje tu szary, zeby
 // neutralny podglad ustawienia byl szary takze dla skoczka.
@@ -51,6 +58,12 @@ uniform int shade_bands : hint_range(2, 5) = 5;
 uniform vec4 shadow_tint : source_color = vec4(0.32, 0.32, 0.40, 1.0);
 uniform float edge_darken : hint_range(0.0, 1.0) = 0.4;
 uniform float bottom_darken : hint_range(0.0, 1.0) = 0.35;
+// Światło zastane. Kafelki mają własne emission (board_tile.gd), a ten shader ma
+// ambient_light_disabled i żadnego środowiska, więc bez tego członu zacieniona
+// strona figury spada do shadow_tint i figura wychodzi kilka razy ciemniejsza od
+// płyty, na której stoi - zmierzone: 32/255 przy 145/255. EMISSION dodaje się
+// niezależnie od świateł, więc to jest właściwy odpowiednik tamtego emission.
+uniform float ambient : hint_range(0.0, 1.0) = 0.18;
 // Bryła stoi teraz w świecie planszy (figura nie jest już pieczona w osobnym
 // buforze), więc te dwie liczby to współrzędne ŚWIATA, a nie lokalne. figura.gd
 // wylicza je z pozycji figury i zmierzonej bryły modelu.
@@ -64,11 +77,18 @@ varying float v_podstawa;
 varying float v_krawedz;
 
 void fragment() {
-	vec3 base = albedo_color.rgb * tint.rgb;
+	vec3 base = tint.rgb;
+	if (use_texture) {
+		base *= texture(albedo_texture, UV).rgb;
+	} else {
+		base *= albedo_color.rgb;
+	}
 	if (use_vertex_color) {
 		base *= COLOR.rgb;
 	}
 	ALBEDO = base;
+	// Podniesienie dna: bez niego zacieniona strona figury zlewa się z tłem.
+	EMISSION = base * ambient;
 
 	// Fake occlusion toward the piece's base.
 	float wysokosc = clamp((VERTEX.y - height_base) / max(height_top - height_base, 0.001), 0.0, 1.0);
