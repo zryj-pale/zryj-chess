@@ -42,6 +42,10 @@ func run() -> void:
 	await frames()
 	for piece in pieces:
 		var sprite = piece._model_sprite
+		check(sprite.capture.size == Vector2i(160, 160), "Model and outline must be rendered before pixelisation")
+		check(sprite.geometry_capture != null and sprite.geometry_capture.size == Vector2i(160, 160), "Internal edges need a matching normal/depth capture")
+		check(sprite.geometry_capture.use_hdr_2d, "Geometry data must stay linear and retain floating-point depth precision")
+		check(sprite.outline_horizontal != null and sprite.outline_composite != null, "The capture must contain both continuous outline passes")
 		var image: Image = sprite.texture.get_image()
 		check(image.get_size() == Vector2i(80, 80), "Capture must be exactly 80x80")
 		var occupied := image.get_used_rect()
@@ -81,7 +85,7 @@ func run() -> void:
 		check(contents.basis.is_equal_approx(tilt), "Model orientation must follow the tile")
 		check((contents.transform * Vector3(0, -0.5, 0)).is_equal_approx(drift + Vector3(0, -0.5, 0)), "Foot must remain on the tilted tile")
 		for corner in sprite._corners:
-			var uv: Vector2 = sprite.capture_camera.unproject_position(corner)
+			var uv: Vector2 = sprite.capture_camera.unproject_position(corner) / float(sprite.SOURCE_SCALE)
 			var plane_point: Vector3 = Vector3(uv.x - 40.0, 40.0 - uv.y, 0) * sprite.pixel_size
 			var actual := camera.unproject_position(sprite.to_global(plane_point))
 			var expected := camera.unproject_position(contents.to_global(corner))
@@ -102,6 +106,39 @@ func run() -> void:
 	await frames()
 	for piece in pieces:
 		check(piece._model_sprite.texture.get_image().get_used_rect().has_area(), "Promotion to knight must create a visible capture")
+	# Inspect the ears and underside from a full orbit, including shallow views.
+	var orbit := Image.create(6 * 80, 4 * 80, false, Image.FORMAT_RGBA8)
+	orbit.fill(Color(0.65, 0.65, 0.65))
+	for elevation in 2:
+		for angle in 12:
+			var target: Vector3 = pieces[0].global_position
+			var yaw := float(angle) * TAU / 12.0
+			camera.position = target + Vector3(sin(yaw) * 4.0, 2.0 if elevation == 0 else 4.0, cos(yaw) * 4.0)
+			camera.look_at(target)
+			await frames()
+			var sprite = pieces[0]._model_sprite
+			var image: Image = sprite.texture.get_image()
+			var occupied := image.get_used_rect()
+			check(occupied.has_area(), "Orbit capture must show the knight")
+			check(occupied.position.x > 0 and occupied.position.y > 0 and occupied.end.x < 80 and occupied.end.y < 80, "Orbit outline must fit inside the capture")
+			orbit.blend_rect(image, Rect2i(0, 0, 80, 80), Vector2i((angle % 6) * 80, (elevation * 2 + angle / 6) * 80))
+	orbit.resize(960, 640, Image.INTERPOLATE_NEAREST)
+	orbit.save_png("res://.godot/sprite_80_orbit.png")
+	# Small tile motion used to move pre-rendered ink between nearest samples.
+	var motion := Image.create(6 * 80, 2 * 80, false, Image.FORMAT_RGBA8)
+	motion.fill(Color(0.65, 0.65, 0.65))
+	camera.position = Vector3(0, 4, 3)
+	camera.look_at(Vector3.ZERO)
+	for phase in 12:
+		var time := float(phase) * TAU / 12.0
+		for piece in pieces:
+			piece.ustaw_lewitacje(Vector3(0.009 * sin(time), 0.022 * cos(time), -0.009 * sin(time)), Basis.from_euler(Vector3(0.06 * sin(time), 0.02 * cos(time), -0.04 * sin(time))))
+		await frames()
+		for piece in pieces:
+			check_ink_survives(piece._model_sprite)
+		motion.blend_rect(pieces[0]._model_sprite.texture.get_image(), Rect2i(0, 0, 80, 80), Vector2i((phase % 6) * 80, (phase / 6) * 80))
+	motion.resize(960, 320, Image.INTERPOLATE_NEAREST)
+	motion.save_png("res://.godot/sprite_80_motion.png")
 	board.queue_free()
 	await process_frame
 	for scene_path in ["res://scenes/ustawianie.tscn", "res://scenes/main.tscn"]:
@@ -121,6 +158,30 @@ func run() -> void:
 		await process_frame
 	print("Sprite 80 GPU checks: %d failures" % failures)
 	quit(1 if failures else 0)
+
+func is_ink(color: Color) -> bool:
+	return color.a > 0.5 and maxf(color.r, maxf(color.g, color.b)) < 0.001
+
+func check_ink_survives(sprite: Sprite3D) -> void:
+	var source: Image = sprite.outline_composite.get_texture().get_image()
+	var reduced: Image = sprite.texture.get_image()
+	var lost := 0
+	var changed_fill := 0
+	for y in 80:
+		for x in 80:
+			var ink := false
+			for dy in 2:
+				for dx in 2:
+					ink = ink or is_ink(source.get_pixel(x * 2 + dx, y * 2 + dy))
+			if ink and not is_ink(reduced.get_pixel(x, y)):
+				lost += 1
+			if not ink:
+				var expected := source.get_pixel(x * 2 + 1, y * 2 + 1)
+				var actual := reduced.get_pixel(x, y)
+				if absf(expected.a - actual.a) > 0.005 or (expected.a > 0.5 and (absf(expected.r - actual.r) > 0.005 or absf(expected.g - actual.g) > 0.005 or absf(expected.b - actual.b) > 0.005)):
+					changed_fill += 1
+	check(lost == 0, "Pixel reduction dropped %d ink pixels during tile motion" % lost)
+	check(changed_fill == 0, "Non-ink pixels must retain nearest colour and transparency")
 
 func check_base_center(piece: Node3D) -> void:
 	# Check the complete plinth, including its higher opposite edge. Checking
