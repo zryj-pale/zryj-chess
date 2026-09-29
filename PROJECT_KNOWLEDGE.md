@@ -260,7 +260,7 @@ Kolekcja kart nadal mieści się na jednej stronie (12 ≤ 16/stronę), więc pa
 - Sieć gry: `PacketPeerUDP` i własny protokół wiadomości.
 - Serwer pomocniczy: Python, UDP.
 
-- Eksperyment `triangle-edge-experiment` (baza `9905a15` na `deepseek`): wszystkie widoczne krawędzie trójkątów są dodatkowo rysowane cienkim czarnym tuszem o kryciu 28%. Siatka koloru przekazuje współrzędne barycentryczne w UV2 do dodatkowego renderu 160×160 z testem głębokości. Delikatna warstwa jest składana przed mocnymi konturami i redukcją do 80×80. Parametry w `piece_pixel_render.gd`: `TRIANGLE_EDGES_ENABLED`, `TRIANGLE_EDGE_OPACITY = 0.28`, `TRIANGLE_EDGE_WIDTH = 0.55`. Ustawienie przełącznika na `false` usuwa dodatkowy przebieg; powrót całego eksperymentu: `git switch deepseek` po zachowaniu ewentualnych dalszych zmian. Dodatkowy viewport zwiększa koszt renderowania ruchomych figur.
+- Eksperyment `triangle-edge-experiment` (baza `9905a15` na `deepseek`): wszystkie widoczne krawędzie trójkątów są dodatkowo rysowane cienkim czarnym tuszem o kryciu 28%. Siatka koloru przekazuje współrzędne barycentryczne w UV2 do dodatkowego renderu 160×160 z testem głębokości. Delikatna warstwa jest składana przed mocnymi konturami i redukcją do 80×80. Parametry w `piece_pixel_render.gd`: `TRIANGLE_EDGES_ENABLED`, `TRIANGLE_EDGE_OPACITY = 0.28`, `TRIANGLE_EDGE_WIDTH = 0.4675`. Ustawienie przełącznika na `false` usuwa dodatkowy przebieg; powrót całego eksperymentu: `git switch deepseek` po zachowaniu ewentualnych dalszych zmian. Dodatkowy viewport zwiększa koszt renderowania ruchomych figur.
 
 ### Główne komponenty
 

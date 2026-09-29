@@ -15,7 +15,7 @@ const OUTLINE_RADIUS := 2 # source pixels; 1 final pixel before ink-preserving r
 # Experiment: false restores the 9905a15 rendering path without an extra pass.
 const TRIANGLE_EDGES_ENABLED := true
 const TRIANGLE_EDGE_OPACITY := 0.28
-const TRIANGLE_EDGE_WIDTH := 0.55 # source pixels on each side, before 2x reduction
+const TRIANGLE_EDGE_WIDTH := 0.4675 # source pixels on each side, before 2x reduction
 
 var capture: SubViewport
 var geometry_capture: SubViewport

@@ -8,7 +8,7 @@ varying float view_depth;
 uniform float depth_origin = 0.0;
 uniform float depth_span = 1.0;
 uniform bool triangle_edges_only = false;
-uniform float triangle_width = 0.55;
+uniform float triangle_width = 0.4675;
 
 vec2 encode_normal(vec3 normal) {
 	normal /= abs(normal.x) + abs(normal.y) + abs(normal.z);
