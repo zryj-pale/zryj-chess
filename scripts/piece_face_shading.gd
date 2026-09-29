@@ -5,6 +5,11 @@ extends RefCounted
 # No camera position, board light, shadow map or time enters this calculation.
 const LIGHT_DIRECTION := Vector3(-0.65, 1.0, 0.45)
 const DARKEST := 0.20
+# Temporary: use the existing unmarked wood for both knight variants.
+# This hides the painted face from either online camera without moving it
+# onto another visible side of the mesh. Original assets remain untouched.
+const HIDE_PAINTED_FACE := true
+const UNMARKED_WOOD := preload("res://assets/skoczek czarny_wood texture.jpg")
 
 static func bake(source: MeshInstance3D, model_basis: Basis) -> ArrayMesh:
 	var result := ArrayMesh.new()
@@ -40,6 +45,8 @@ static func bake(source: MeshInstance3D, model_basis: Basis) -> ArrayMesh:
 				builder.add_vertex(vertices[index])
 		var original := source.get_active_material(surface)
 		var material := original.duplicate() as StandardMaterial3D if original is StandardMaterial3D else StandardMaterial3D.new()
+		if HIDE_PAINTED_FACE:
+			material.albedo_texture = UNMARKED_WOOD
 		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		material.vertex_color_use_as_albedo = true
 		material.vertex_color_is_srgb = false

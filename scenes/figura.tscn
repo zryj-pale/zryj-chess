@@ -23,10 +23,10 @@ region_rect = Rect2(64, 0, 64, 64)
 ; Modele sa zrodlami renderu 80x80 oraz geometrii cienia.
 ; Zachowuja oryginalne materialy drewna; figura.gd ukrywa je na planszy.
 [node name="SkoczekBialy" parent="Zawartosc" unique_id=315203469 instance=ExtResource("3_bialy")]
-transform = Transform3D(0.0289, 0, 0, 0, 0.0289, 0, 0, 0, 0.0289, 0, 0, 0)
+transform = Transform3D(0.03179, 0, 0, 0, 0.03179, 0, 0, 0, 0.03179, 0, 0, 0)
 
 [node name="SkoczekCzarny" parent="Zawartosc" unique_id=315203470 instance=ExtResource("4_czarny")]
-transform = Transform3D(0.0289, 0, 0, 0, 0.0289, 0, 0, 0, 0.0289, 0, 0, 0)
+transform = Transform3D(0.03179, 0, 0, 0, 0.03179, 0, 0, 0, 0.03179, 0, 0, 0)
 
 ; Sprite nie rzuca prostokatnego cienia: robi to niewidoczna kopia modelu.
 [node name="Cien" type="Node3D" parent="Zawartosc" unique_id=1304772915]
