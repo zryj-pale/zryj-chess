@@ -12,9 +12,16 @@ const OUTLINE_HORIZONTAL_SHADER := preload("res://shaders/piece_outline_horizont
 const OUTLINE_COMPOSITE_SHADER := preload("res://shaders/piece_outline_composite.gdshader")
 const PIXEL_REDUCE_SHADER := preload("res://shaders/piece_pixel_reduce.gdshader")
 const OUTLINE_RADIUS := 2 # source pixels; 1 final pixel before ink-preserving reduction
+# Experiment: false restores the 9905a15 rendering path without an extra pass.
+const TRIANGLE_EDGES_ENABLED := true
+const TRIANGLE_EDGE_OPACITY := 0.28
+const TRIANGLE_EDGE_WIDTH := 0.55 # source pixels on each side, before 2x reduction
 
 var capture: SubViewport
 var geometry_capture: SubViewport
+var triangle_capture: SubViewport
+var triangle_camera: Camera3D
+var _triangle_material: ShaderMaterial
 var outline_horizontal: SubViewport
 var outline_composite: SubViewport
 var pixel_capture: SubViewport
@@ -52,6 +59,23 @@ func configure(model: Node3D) -> void:
 	add_child(geometry_capture)
 	_geometry_material = ShaderMaterial.new()
 	_geometry_material.shader = GEOMETRY_DATA_SHADER
+	if TRIANGLE_EDGES_ENABLED:
+		triangle_capture = SubViewport.new()
+		triangle_capture.name = "TriangleEdges160"
+		triangle_capture.size = Vector2i(SOURCE_RESOLUTION, SOURCE_RESOLUTION)
+		triangle_capture.own_world_3d = true
+		triangle_capture.transparent_bg = true
+		triangle_capture.use_hdr_2d = true
+		triangle_capture.handle_input_locally = false
+		triangle_capture.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		add_child(triangle_capture)
+		_triangle_material = ShaderMaterial.new()
+		_triangle_material.shader = GEOMETRY_DATA_SHADER
+		_triangle_material.set_shader_parameter("triangle_edges_only", true)
+		_triangle_material.set_shader_parameter("triangle_width", TRIANGLE_EDGE_WIDTH)
+		triangle_camera = Camera3D.new()
+		triangle_capture.add_child(triangle_camera)
+		triangle_camera.current = true
 	_copy_meshes(model, model.get_parent() as Node3D)
 	capture_camera = Camera3D.new()
 	capture_camera.near = 0.01
@@ -79,6 +103,10 @@ func _create_outline_pipeline() -> void:
 	composite_material.set_shader_parameter("horizontal_mask", outline_horizontal.get_texture())
 	composite_material.set_shader_parameter("geometry_texture", geometry_capture.get_texture())
 	composite_material.set_shader_parameter("radius", OUTLINE_RADIUS)
+	composite_material.set_shader_parameter("triangle_edges_enabled", TRIANGLE_EDGES_ENABLED)
+	composite_material.set_shader_parameter("triangle_opacity", TRIANGLE_EDGE_OPACITY)
+	if triangle_capture != null:
+		composite_material.set_shader_parameter("triangle_texture", triangle_capture.get_texture())
 	outline_composite = _canvas_pass("OutlineComposite160", SOURCE_RESOLUTION, capture.get_texture(), composite_material)
 
 	# Preserve pre-rendered ink from all four source texels. Pure nearest
@@ -128,6 +156,13 @@ func _copy_meshes(node: Node, origin: Node3D) -> void:
 			geometry_copy.material_override = _geometry_material
 			geometry_copy.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			geometry_capture.add_child(geometry_copy)
+			if triangle_capture != null:
+				var triangle_copy := MeshInstance3D.new()
+				triangle_copy.transform = copy.transform
+				triangle_copy.mesh = copy.mesh
+				triangle_copy.material_override = _triangle_material
+				triangle_copy.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				triangle_capture.add_child(triangle_copy)
 			for corner in 8:
 				_corners.append(copy.transform * source.get_aabb().get_endpoint(corner))
 	for child in node.get_children():
@@ -173,6 +208,9 @@ func refresh_view() -> void:
 	capture_camera.set_frustum(frame_size, center, near_plane, board_camera.far)
 	geometry_camera.transform = view_transform
 	geometry_camera.set_frustum(frame_size, center, near_plane, board_camera.far)
+	if triangle_camera != null:
+		triangle_camera.transform = view_transform
+		triangle_camera.set_frustum(frame_size, center, near_plane, board_camera.far)
 	_geometry_material.set_shader_parameter("depth_origin", closest_depth)
 	_geometry_material.set_shader_parameter("depth_span", maxf(farthest_depth - closest_depth, 0.001))
 	# Reproject the cropped image onto precisely the same screen rectangle.
@@ -190,6 +228,8 @@ func refresh_view() -> void:
 	# but every new frame still ends as exactly 80x80 with preserved ink.
 	capture.render_target_update_mode = SubViewport.UPDATE_ONCE
 	geometry_capture.render_target_update_mode = SubViewport.UPDATE_ONCE
+	if triangle_capture != null:
+		triangle_capture.render_target_update_mode = SubViewport.UPDATE_ONCE
 	outline_horizontal.render_target_update_mode = SubViewport.UPDATE_ONCE
 	outline_composite.render_target_update_mode = SubViewport.UPDATE_ONCE
 	pixel_capture.render_target_update_mode = SubViewport.UPDATE_ONCE

@@ -30,6 +30,9 @@ static func bake(source: MeshInstance3D, model_basis: Basis) -> ArrayMesh:
 			var light := clampf(direction.dot(LIGHT_DIRECTION.normalized()) * 0.5 + 0.5, 0.0, 1.0)
 			var shade := lerpf(DARKEST, 1.0, pow(light, 1.6))
 			for index in [a, b, c]:
+				# Each triangle owns its vertices. UV2 carries two barycentric
+				# coordinates for the optional fine triangle-edge pass.
+				builder.set_uv2(Vector2(1, 0) if index == a else (Vector2(0, 1) if index == b else Vector2.ZERO))
 				builder.set_color(Color(shade, shade, shade, 1))
 				builder.set_normal(face)
 				if not uvs.is_empty():

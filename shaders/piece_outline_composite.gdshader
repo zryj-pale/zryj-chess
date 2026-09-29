@@ -7,6 +7,9 @@ render_mode unshaded;
 uniform sampler2D source_texture : source_color, filter_nearest;
 uniform sampler2D horizontal_mask : filter_nearest;
 uniform sampler2D geometry_texture : filter_nearest;
+uniform sampler2D triangle_texture : filter_nearest;
+uniform bool triangle_edges_enabled = false;
+uniform float triangle_opacity : hint_range(0.0, 1.0) = 0.28;
 uniform int radius : hint_range(1, 8) = 5;
 uniform float normal_threshold : hint_range(0.01, 1.0) = 0.12;
 // Fraction of this piece's depth range, not camera distance.
@@ -56,6 +59,19 @@ void fragment() {
 				}
 			}
 		}
+	}
+	if (triangle_edges_enabled) {
+		// Resolve the thin stroke over its final 2x2 footprint before the
+		// reduction, so faint diagonals do not turn into dotted lines.
+		vec2 size = vec2(textureSize(triangle_texture, 0));
+		vec2 origin = floor(UV * size / 2.0) * 2.0;
+		float fine_edge = 0.0;
+		for (int y = 0; y < 2; y++) {
+			for (int x = 0; x < 2; x++) {
+				fine_edge = max(fine_edge, textureLod(triangle_texture, (origin + vec2(float(x), float(y)) + 0.5) / size, 0.0).r);
+			}
+		}
+		model.rgb *= 1.0 - fine_edge * triangle_opacity;
 	}
 	model.rgb = mix(model.rgb, vec3(0.0), internal_edge);
 	COLOR = model + outline * (1.0 - model.a);

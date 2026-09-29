@@ -53,6 +53,28 @@ func run() -> void:
 		check(occupied.position.x > 0 and occupied.position.y > 0 and occupied.end.x < 80 and occupied.end.y < 80, "Model must fit inside the capture")
 		image.save_png("res://.godot/sprite_80_%s.png" % piece.kolor)
 		var original := image.get_data()
+		if sprite.TRIANGLE_EDGES_ENABLED:
+			var compositor: ShaderMaterial = sprite.outline_composite.get_child(0).material
+			compositor.set_shader_parameter("triangle_edges_enabled", false)
+			sprite.outline_composite.render_target_update_mode = SubViewport.UPDATE_ONCE
+			sprite.pixel_capture.render_target_update_mode = SubViewport.UPDATE_ONCE
+			await frames()
+			var plain: Image = sprite.texture.get_image()
+			var faint_pixels := 0
+			for y in 80:
+				for x in 80:
+					var before := plain.get_pixel(x, y)
+					var after := image.get_pixel(x, y)
+					check(absf(before.a - after.a) < 0.005, "Triangle lines must not change model transparency")
+					if is_ink(before):
+						check(is_ink(after), "Strong contours must remain black above faint triangle edges")
+					elif before.a > 0.5 and before.r - after.r > 0.005:
+						faint_pixels += 1
+						check(after.r >= before.r * (1.0 - sprite.TRIANGLE_EDGE_OPACITY) - 0.01, "Triangle lines must respect their opacity")
+			check(faint_pixels > 20, "Triangle experiment must add visible faint edges")
+			compositor.set_shader_parameter("triangle_edges_enabled", true)
+			sprite.outline_composite.render_target_update_mode = SubViewport.UPDATE_ONCE
+			sprite.pixel_capture.render_target_update_mode = SubViewport.UPDATE_ONCE
 		await frames()
 		check(sprite.texture.get_image().get_data() == original, "A stationary model must have stable pixels")
 		# Even forced rerendering under a bright coloured light must not change
