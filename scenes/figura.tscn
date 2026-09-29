@@ -20,18 +20,13 @@ texture = ExtResource("2_yw1en")
 region_enabled = true
 region_rect = Rect2(64, 0, 64, 64)
 
-; Dwa modele skoczka - bialy i czarny - roznia sie tylko wbudowana tekstura
-; drewna, wiec o tym, ktory jest widoczny, decyduje kolor figury. Material
-; (shader rozpikselowujacy figure) zaklada im figura.gd, razem z tekstura
-; odczytana z samego modelu.
+; Modele sa zrodlami renderu 80x80 oraz geometrii cienia.
+; Zachowuja oryginalne materialy drewna; figura.gd ukrywa je na planszy.
 [node name="SkoczekBialy" parent="Zawartosc" unique_id=315203469 instance=ExtResource("3_bialy")]
-transform = Transform3D(0.04, 0, 0, 0, 0.04, 0, 0, 0, 0.04, 0, 0, 0)
+transform = Transform3D(0.034, 0, 0, 0, 0.034, 0, 0, 0, 0.034, 0, 0, 0)
 
 [node name="SkoczekCzarny" parent="Zawartosc" unique_id=315203470 instance=ExtResource("4_czarny")]
-transform = Transform3D(0.04, 0, 0, 0, 0.04, 0, 0, 0, 0.04, 0, 0, 0)
+transform = Transform3D(0.034, 0, 0, 0, 0.034, 0, 0, 0, 0.034, 0, 0, 0)
 
-; Cien rzuca osobna, nigdy nie rysowana kopia bryły, stojąca na warstwie planszy
-; (SHADOWS_ONLY). Mesh stojący na warstwie figur nie trafiłby do mapy cieni
-; widoku planszy, bo pass cieni respektuje maskę kamery tej warstwy. Kopie buduje
-; figura.gd z aktualnie widocznego modelu, żeby cień zgadzał się z sylwetką.
+; Sprite nie rzuca prostokatnego cienia: robi to niewidoczna kopia modelu.
 [node name="Cien" type="Node3D" parent="Zawartosc" unique_id=1304772915]

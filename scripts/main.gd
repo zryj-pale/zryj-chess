@@ -86,9 +86,6 @@ func _ready() -> void:
 	_add_menu_background()
 	_init_tile_materials()
 	BoardTile.setup_board(board_viewport, board_root)
-	var figury_viewport: SubViewport = board_viewport.get_node("FiguryViewport")
-	($Figury as WarstwaFigur).setup(board_viewport, camera, board_container,
-		figury_viewport, figury_viewport.get_node("Kamera"))
 	generacja_pol(6)
 	_on_window_resized()
 	get_viewport().size_changed.connect(_on_window_resized)
@@ -893,7 +890,9 @@ func _sync_levitation() -> void:
 		if figura == null:
 			continue
 		# A held piece hangs off the cursor rather than off any one square.
-		figura.ustaw_lewitacje(Vector3.ZERO if figura == chwycona else _levitation_at(pozycja(figura)))
+		var tile = tiles.get(pozycja(figura)) if figura != chwycona else null
+		figura.ustaw_lewitacje(tile.levitation_offset() if tile != null else Vector3.ZERO,
+			tile.basis if tile != null else Basis.IDENTITY)
 	if duck_marker != null and duck_marker.visible:
 		duck_marker.position = _piece_position(duck_position) + _levitation_at(duck_position)
 

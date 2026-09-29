@@ -3,25 +3,16 @@ extends Node3D
 @export var typ: String
 @export var kolor: String
 
-# ── Dwie drogi, ten sam piksel ──────────────────────────────────────────────
-#
-# Figury są płaskimi billboardami z jednej komórki assets/pionkler.png - poza
-# skoczkiem, który ma modele i stoi na planszy jako prawdziwa bryła 3D. Tak czy
-# tak rozpikselowanie pochodzi z scripts/warstwa_figur.gd: cała warstwa figur
-# jest renderowana w 32 pikselach na kratkę planszy i powiększana filtrem
-# nearest, więc obie drogi dają ten sam rozmiar piksela.
-#
-# Skoczek ma dwa modele, biały i czarny (assets/skoczek bialy.glb, skoczek
-# czarny.glb). Różni je wbudowana tekstura drewna, więc o wyborze decyduje kolor
-# figury. Oba leżą w scenie i przełącza je widoczność.
+# Modele stoją podstawą na kafelku. Ich rzeczywisty widok perspektywiczny
+# jest renderowany w 80×80, także podczas ruchu.
 const TYP_Z_MODELEM := "S" # na razie tylko skoczek ma modele
 const PIECE_Y := 0.5 # main.gd/ustawianie.gd stawiają figurę pół kratki nad płytą
-const WYSOKOSC_ATLASU := 64.0 # jedna komórka pionkler.png = jedna kratka
-const MATERIAL_WZOR := preload("res://assets/pixelfigury.tres")
+const MODEL_SPRITE := preload("res://scripts/piece_pixel_render.gd")
 
-# Node3D nie ma własnego modulate (to pojęcie z 2D), więc rozdzielamy je na to,
-# co widać: sprite dostaje modulate, a cieniowane modele tint do shadera.
+# Node3D nie ma własnego modulate; kolor przekazujemy gotowym sprite'om.
 var modulate: Color = Color.WHITE:
+	get:
+		return _modulate
 	set(value):
 		_modulate = value
 		_odswiez_zabarwienie()
@@ -58,20 +49,19 @@ const NAZWY = {
 	"Kc":"c_krol"
 	}
 
-# Siatka -> własna kopia materiału (tint i zakres gradientu są per figura).
-var _materialy := {}
-var _wysokosc := 1.0
+var _model_sprite: Sprite3D
 
 func _ready() -> void:
-	_ustaw_warstwy()
 	_posadz_modele()
-	_ustaw_materialy()
 	_zastosuj_typ()
 
 # Pozycja figury jest tym, co czyta logika szachowa, więc dryf płyty nie może jej
 # ruszać - dlatego przesuwa się tylko zawartość.
-func ustaw_lewitacje(offset: Vector3) -> void:
-	($Zawartosc as Node3D).position = offset
+func ustaw_lewitacje(offset: Vector3, tile_basis := Basis.IDENTITY) -> void:
+	# Rotate around the foot, half a tile below the logical piece origin.
+	var pivot := Vector3(0, -PIECE_Y, 0)
+	var orientation := tile_basis if model_dla(typ, kolor) != null else Basis.IDENTITY
+	($Zawartosc as Node3D).transform = Transform3D(orientation, offset + pivot - orientation * pivot)
 
 func promocja(typ_figury) -> void:
 	typ = typ_figury
@@ -90,7 +80,15 @@ func model_dla(typ_figury: String, kolor_figury: String) -> Node3D:
 func _zastosuj_typ() -> void:
 	var model := model_dla(typ, kolor)
 	for wezel in _modele():
-		wezel.visible = wezel == model
+		wezel.visible = false
+	if _model_sprite != null:
+		_model_sprite.visible = false
+		_model_sprite.queue_free()
+		_model_sprite = null
+	if model != null:
+		_model_sprite = MODEL_SPRITE.new()
+		$Zawartosc.add_child(_model_sprite)
+		_model_sprite.configure(model)
 	($Zawartosc/tekstura as Sprite3D).visible = model == null
 	if model == null:
 		var nazwa: String = NAZWY.get(typ + kolor, NAZWY["Pb"])
@@ -98,44 +96,37 @@ func _zastosuj_typ() -> void:
 	_ustaw_cien(model)
 	_odswiez_zabarwienie()
 
-# Figury stoją na warstwie 2: kamera planszy ma tę warstwę wykluczoną, a kamera
-# warstwy figur widzi wyłącznie ją - inaczej każda figura rysowałaby się dwa razy.
-func _ustaw_warstwy() -> void:
-	var maska := 1 << (WarstwaFigur.WARSTWA_FIGUR - 1)
-	for wezel in [$Zawartosc/tekstura, $Zawartosc/SkoczekBialy, $Zawartosc/SkoczekCzarny]:
-		for widoczny in _widoczne(wezel):
-			widoczny.layers = maska
-
-func _widoczne(wezel: Node) -> Array[VisualInstance3D]:
-	var wynik: Array[VisualInstance3D] = []
-	if wezel is VisualInstance3D:
-		wynik.append(wezel)
-	for dziecko in wezel.get_children():
-		wynik.append_array(_widoczne(dziecko))
-	return wynik
-
 # Origin modelu nie leży w jego stopach, więc figura postawiona na PIECE_Y
 # wisiałaby pół kratki nad swoim polem. Mierzone z bryły i wyrównywane dla
 # każdego modelu osobno, żeby podmiana modelu nie przesuwała figury.
 func _posadz_modele() -> void:
-	var najwyzsza := 0.0
 	for model in _modele():
 		var dol := INF
 		var gora := -INF
+		var punkty: Array[Vector3] = []
 		for siatka in _siatki(model):
-			var pudelko: AABB = siatka.get_aabb()
 			var wzgledem: Transform3D = global_transform.affine_inverse() * siatka.global_transform
-			for wierzcholek in 8:
-				var punkt: Vector3 = wzgledem * pudelko.get_endpoint(wierzcholek)
-				dol = minf(dol, punkt.y)
-				gora = maxf(gora, punkt.y)
+			for surface in siatka.mesh.get_surface_count():
+				var vertices: PackedVector3Array = siatka.mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX]
+				for vertex in vertices:
+					var punkt: Vector3 = wzgledem * vertex
+					punkty.append(punkt)
+					dol = minf(dol, punkt.y)
+					gora = maxf(gora, punkt.y)
 		if dol == INF:
 			continue
-		# Powierzchnia płyty leży PIECE_Y poniżej origina figury.
-		(model as Node3D).position.y -= dol + PIECE_Y
-		najwyzsza = maxf(najwyzsza, gora - dol)
-	if najwyzsza > 0.0:
-		_wysokosc = najwyzsza
+		# The imported base is slightly uneven: its opposite edge is higher
+		# than the lowest one. Include the bottom 5% of the model so the
+		# footprint contains the entire plinth, not only its lowest edge.
+		var base_height := (gora - dol) * 0.05
+		var base_min := Vector2(INF, INF)
+		var base_max := Vector2(-INF, -INF)
+		for punkt in punkty:
+			if punkt.y <= dol + base_height:
+				base_min = base_min.min(Vector2(punkt.x, punkt.z))
+				base_max = base_max.max(Vector2(punkt.x, punkt.z))
+		var center := (base_min + base_max) * 0.5
+		model.position -= Vector3(center.x, dol + PIECE_Y, center.y)
 
 func _siatki(wezel: Node) -> Array[MeshInstance3D]:
 	var wynik: Array[MeshInstance3D] = []
@@ -145,51 +136,14 @@ func _siatki(wezel: Node) -> Array[MeshInstance3D]:
 		wynik.append_array(_siatki(dziecko))
 	return wynik
 
-# Każdy model dostaje własną kopię shadera rozpikselowującego. Tekstura nie jest
-# wpisana na sztywno: czytamy ją z materiału, który przyniósł sam model (glTF
-# wstawia tam swoje drewno), więc podmiana modelu wystarcza, żeby zmienił się
-# kolor figury - shader zostaje ten sam.
-func _ustaw_materialy() -> void:
-	for model in _modele():
-		for siatka in _siatki(model):
-			var material := MATERIAL_WZOR.duplicate() as ShaderMaterial
-			var zrodlo: Material = null
-			if siatka.mesh != null and siatka.mesh.get_surface_count() > 0:
-				zrodlo = siatka.mesh.surface_get_material(0)
-			var tekstura: Texture2D = null
-			if zrodlo is StandardMaterial3D:
-				tekstura = (zrodlo as StandardMaterial3D).albedo_texture
-			material.set_shader_parameter("use_texture", tekstura != null)
-			if tekstura != null:
-				material.set_shader_parameter("albedo_texture", tekstura)
-			siatka.set_surface_override_material(0, material)
-			_materialy[siatka] = material
-	_ustaw_zakres_wysokosci()
-
-# Shader przyciemnia figurę ku jej własnej podstawie (fałszywe AO, które nadaje
-# bryłę modelowi o 92 trójkątach). Płyta leży na świecie y = 0 (main.gd
-# i ustawianie.gd liczą pole jako Vector3(x, 0, y), a figura stoi PIECE_Y nad nią
-# i dokładnie tyle samo odejmuje model), więc podstawa jest w y = 0 na każdym
-# polu. Liczone wprost, a nie z global_position: w _ready() figura nie ma jeszcze
-# ustawionej pozycji, bo dodanie do drzewa jest przed przypisaniem position.
-func _ustaw_zakres_wysokosci() -> void:
-	for siatka in _materialy:
-		var material: ShaderMaterial = _materialy[siatka]
-		material.set_shader_parameter("height_base", 0.0)
-		material.set_shader_parameter("height_top", maxf(_wysokosc, 0.001))
-
 func _odswiez_zabarwienie() -> void:
-	var sprite := $Zawartosc/tekstura as Sprite3D
+	var sprite := get_node_or_null("Zawartosc/tekstura") as Sprite3D
 	if sprite != null:
 		sprite.modulate = _modulate
-	for siatka in _materialy:
-		var material: ShaderMaterial = _materialy[siatka]
-		material.set_shader_parameter("tint", _modulate)
+	if _model_sprite != null:
+		_model_sprite.modulate = _modulate
 
-# Cień rzuca osobna, nigdy nie rysowana kopia bryły (SHADOWS_ONLY) na warstwie
-# planszy. Musi być przebudowana przy każdej zmianie modelu, żeby sylwetka cienia
-# zgadzała się z tym, co widać. Kopie siedzą w Zawartości, więc jadą razem
-# z lewitacją płyty.
+# Cień rzuca niewidoczna kopia modelu, zamiast prostokąta sprite'a.
 func _ustaw_cien(model: Node3D) -> void:
 	var cien := $Zawartosc/Cien as Node3D
 	for dziecko in cien.get_children():

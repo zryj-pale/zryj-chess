@@ -49,9 +49,6 @@ var drag_moved := false
 
 func _ready() -> void:
 	BoardTile.setup_board(board_viewport, board_root)
-	var figury_viewport: SubViewport = board_viewport.get_node("FiguryViewport")
-	($Figury as WarstwaFigur).setup(board_viewport, camera, board_container,
-		figury_viewport, figury_viewport.get_node("Kamera"))
 	generacja_pol(1, 4, 6, 6)
 	_compute_board_bounds()
 	for pole in dostepne_pola:
@@ -314,7 +311,9 @@ func _sync_levitation() -> void:
 		if figura == null:
 			continue
 		# A dragged piece hangs off the cursor rather than off any one square.
-		figura.ustaw_lewitacje(Vector3.ZERO if figura == dragged_figure else _levitation_at(pozycja(figura)))
+		var tile = tiles.get(pozycja(figura)) if figura != dragged_figure else null
+		figura.ustaw_lewitacje(tile.levitation_offset() if tile != null else Vector3.ZERO,
+			tile.basis if tile != null else Basis.IDENTITY)
 
 func _levitation_at(pole: Vector2i) -> Vector3:
 	var tile = tiles.get(pole)
