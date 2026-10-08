@@ -35,8 +35,10 @@ var pending := {}
 var received_sequences := {}
 var white_pieces: Array = []
 var black_pieces: Array = []
-var coin_result := "orzel"
-var initial_turn := "b"
+var coin_result := ""
+var coin_peer_ready := false
+var coin_peer_finished := false
+var initial_turn := ""
 var white_card := ""
 var black_card := ""
 var white_nickname := ""
@@ -81,8 +83,10 @@ func reset() -> void:
 	received_sequences.clear()
 	white_pieces.clear()
 	black_pieces.clear()
-	coin_result = "orzel"
-	initial_turn = "b"
+	coin_result = ""
+	coin_peer_ready = false
+	coin_peer_finished = false
+	initial_turn = ""
 	white_card = ""
 	black_card = ""
 	white_nickname = ""
@@ -199,8 +203,8 @@ func start_game(host_white: Array, guest_black: Array, host_card: String, guest_
 	var resolved := GameRules.resolve_start_position(host_white, guest_black, rng)
 	white_pieces = resolved["white"]
 	black_pieces = resolved["black"]
-	coin_result = "orzel" if rng.randf() < 0.5 else "reszka"
-	initial_turn = GameRules.starting_turn(white_pieces, black_pieces, coin_result)
+	coin_result = ""
+	initial_turn = ""
 	white_card = sanitized_host_card
 	black_card = sanitized_guest_card
 	white_nickname = host_nickname.strip_edges()
@@ -226,8 +230,8 @@ func _receive_payload(payload: Dictionary) -> void:
 			if payload.get("white", []) is Array and payload.get("black", []) is Array:
 				white_pieces = payload["white"]
 				black_pieces = payload["black"]
-				coin_result = str(payload.get("coin", "orzel"))
-				initial_turn = str(payload.get("turn", "b"))
+				coin_result = ""
+				initial_turn = ""
 				white_card = str(payload.get("white_card", ""))
 				black_card = str(payload.get("black_card", ""))
 				white_nickname = str(payload.get("white_nickname", "")).strip_edges()
@@ -238,7 +242,12 @@ func _receive_payload(payload: Dictionary) -> void:
 				game_started.emit(white_pieces, black_pieces, coin_result, initial_turn, white_card, black_card, white_nickname, black_nickname)
 		"action":
 			if payload.get("action", {}) is Dictionary:
-				action_received.emit(payload["action"])
+				var action: Dictionary = payload["action"]
+				if action.get("type") == "coin_ready":
+					coin_peer_ready = true
+				elif action.get("type") == "coin_finished":
+					coin_peer_finished = true
+				action_received.emit(action)
 
 func _send_reliable(payload: Dictionary) -> void:
 	if transport_mode.is_empty():

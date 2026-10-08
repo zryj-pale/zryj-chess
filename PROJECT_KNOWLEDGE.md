@@ -167,7 +167,7 @@ Gra na jednym komputerze. Działa jako główne środowisko testowania zasad. Pr
 
 ### Online
 
-Pokój dla 2 osób, dołączany jednym przyciskiem "Graj online" — kto pierwszy dołączy do danego kodu pokoju, dostaje od serwera rolę hosta (białe), kolejny gracz rolę gościa (czarne); ponowne dołączenie tym samym tokenem zachowuje wcześniej przydzieloną rolę. Zawsze używany jest pierwszy zapisany loadout (bez wyboru, w przeciwieństwie do trybu lokalnego). Po zsynchronizowaniu ustawień host losuje wynik, a obie strony oglądają pełnoekranową animację rzutu monetą 3D; orzeł daje pierwszy ruch białym, reszka czarnym, z wyjątkiem startowego szacha. Implementacja używa UDP, próbuje P2P i ma awaryjny relay przez VPS. Gość widzi planszę odbitą tak, żeby jego własne figury zawsze były u dołu jego ekranu.
+Pokój dla 2 osób, dołączany jednym przyciskiem "Graj online" — kto pierwszy dołączy do danego kodu pokoju, dostaje od serwera rolę hosta (białe), kolejny gracz rolę gościa (czarne); ponowne dołączenie tym samym tokenem zachowuje wcześniej przydzieloną rolę. Zawsze używany jest pierwszy zapisany loadout (bez wyboru, w przeciwieństwie do trybu lokalnego). Po zsynchronizowaniu ustawień host symuluje rzut monetą 3D, a gość odtwarza przesłany przebieg; wynik jest ustalany po fizycznym lądowaniu; orzeł daje pierwszy ruch białym, reszka czarnym, z wyjątkiem startowego szacha. Implementacja używa UDP, próbuje P2P i ma awaryjny relay przez VPS. Gość widzi planszę odbitą tak, żeby jego własne figury zawsze były u dołu jego ekranu.
 
 ### Kampania / tryb fabularny
 
@@ -385,3 +385,39 @@ Poniższe pytania wymagają decyzji zespołu przed większą implementacją:
 - Jak daleko wolno odejść od klasycznych szachów, aby gra nadal była intuicyjna?
 - Czy kampania ma być całkowicie ukryta, czy odkrywana przez sekretne warunki w menu/meczach?
 - Jaki jest docelowy tytuł: „Mini Chess”, „Zryj Chess”, czy inna nazwa (zależna od jeszcze nieustalonego klimatu gry)?
+
+
+### Rzut monetą online — synchronizacja (2026-09-29)
+
+Wynik nie jest losowany w wiadomości startowej meczu. Po gotowości gościa host
+symuluje fizyczny rzut i przesyła numerowane próbki pozycji, obrotu i animacji
+kamery. Gość odtwarza je z interpolacją, bez własnej symulacji fizyki; brakująca
+próbka wstrzymuje odtwarzanie do retransmisji. Oznacza to ten sam przebieg rzutu
+z opóźnieniem sieciowym po stronie gościa. Wynik jest odczytywany dopiero po
+ustabilizowaniu monety na stole i przesyłany z ostatnią próbką, bez obracania
+monety pod wcześniej wybrany wynik. Także lokalnie wynik pochodzi z lądowania.
+Pierwszy ruch jest odblokowywany po zakończeniu prezentacji u obu graczy.
+Obaj gracze muszą używać wersji z tym protokołem rzutu.
+Test fizyki i odtwarzania, w tym brakujące, odwrócone i zduplikowane pakiety:
+`godot --headless --path . --fixed-fps 120 --script res://tests/test_coin_online.gd`.
+
+### Local: Versus i Sandbox (2026-10-04)
+
+Local otwiera wybór Versus / Sandbox. Sandbox startuje z pustą planszą bez
+wymagania króla, wyboru loadoutów ani rzutu monetą. Panel pozwala dodawać figury
+obu kolorów, dowolnie je przenosić i usuwać PPM. Pola i dziury są nieograniczone;
+dołożenie pola naprawia też dziurę. Kolekcja pozwala przełączać wiele kart dla
+każdej strony na żywo. Opcja „Testuj ruchy według kart” włącza legalność ruchów
+i efekty ruchowe; sandbox nie zmienia tur i nigdy nie ogłasza końca meczu.
+Kaczkę można ustawiać ręcznie. Wyłączenie rozszerzenia planszy zachowuje już
+ułożone pola zewnętrzne, ale blokuje dodawanie kolejnych poza zwykłym zakresem.
+Stan sandboxa nie modyfikuje zapisanych armii. `CardRegistry.has` obsługuje
+tablice kart w sandboxie i dotychczasowe pojedyncze identyfikatory w meczach.
+
+Edytor ustawienia usuwa figury przez PPM, zamiast kliknięcia lewym przyciskiem.
+Usuwanie edytorskie jest niedostępne w meczu. Ustawienia zapisują `skip_intro`
+w profilu: opcja pomija film przed menu głównym.
+Test integracyjny: `godot --headless --path . --script res://tests/test_sandbox.gd`.
+Uruchamiać z osobnym katalogiem profilu testowego (APPDATA / LOCALAPPDATA),
+ponieważ test sprawdza zapis ustawień. Opcjonalne `-- --render` bez headless
+zapisuje podglądy sandboxa i kolekcji w `.godot/`.

@@ -60,6 +60,10 @@ func _ready() -> void:
 	for i in range(loadout_buttons.size()):
 		loadout_buttons[i].pressed.connect(_on_loadout_slot_pressed.bind(i))
 	_refresh_loadout_buttons()
+	$Opis.text = "Przeciągnij figurę, aby ją przenieść · PPM: usuń"
+	$Opis.add_theme_font_size_override("font_size", 14)
+	$Opis.position.x = 8
+	$Opis.size.x = 496
 
 # A Control parented to a Node2D anchors against an EMPTY rect, so "full
 # rect" anchors silently collapse the container to 0x0 and none of the board
@@ -179,6 +183,16 @@ func _on_piece_selected(typ: String) -> void:
 	board_root.add_child(drag_preview)
 
 func _unhandled_input(event: InputEvent) -> void:
+	if Ustawienia.is_open():
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		_cancel_drag()
+		var target = stoi_figura(_pole_pod_myszka())
+		if target:
+			usun_figure(target)
+			PozycjaOsobista.save_loadouts()
+		get_viewport().set_input_as_handled()
+		return
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
 		return
 	if dragging:
@@ -216,8 +230,6 @@ func _finish_figure_drag() -> void:
 		if destination != drag_origin:
 			figura.position = _piece_position(destination)
 			_zapisz_przesuniecie(figura, drag_origin, destination)
-		elif not drag_moved:
-			usun_figure(figura)
 	elif destination != drag_origin:
 		$dzwiek/zakaz.play()
 	dragged_figure = null

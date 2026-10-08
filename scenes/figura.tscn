@@ -1,9 +1,14 @@
-[gd_scene load_steps=5 format=3 uid="uid://dkgll8f2miyi3"]
+[gd_scene load_steps=10 format=3 uid="uid://dkgll8f2miyi3"]
 
 [ext_resource type="Script" uid="uid://bit5s7pj2bptd" path="res://scripts/figura.gd" id="1_ce6ih"]
 [ext_resource type="Texture2D" uid="uid://pmmv8mnh5u1h" path="res://assets/pionkler.png" id="2_yw1en"]
 [ext_resource type="PackedScene" path="res://assets/skoczek bialy.glb" id="3_bialy"]
 [ext_resource type="PackedScene" path="res://assets/skoczek czarny.glb" id="4_czarny"]
+[ext_resource type="PackedScene" path="res://assets/nowe modele 3.10.2026/pionek.glb" id="5_pionek"]
+[ext_resource type="Script" path="res://scripts/pawn_model.gd" id="6_pionek"]
+[ext_resource type="PackedScene" path="res://assets/nowe modele 3.10.2026/KRÓLOWA.glb" id="7_krolowa"]
+[ext_resource type="PackedScene" path="res://assets/nowe modele 3.10.2026/król.glb" id="8_krol"]
+[ext_resource type="PackedScene" path="res://assets/nowe modele 3.10.2026/goniec.glb" id="9_goniec"]
 
 [node name="Figura" type="Node3D" unique_id=1012852663]
 script = ExtResource("1_ce6ih")
@@ -20,13 +25,67 @@ texture = ExtResource("2_yw1en")
 region_enabled = true
 region_rect = Rect2(64, 0, 64, 64)
 
-; Modele sa zrodlami renderu 80x80 oraz geometrii cienia.
+; Modele sa zrodlami renderu o wspolnej gestosci pikseli oraz geometrii cienia.
 ; Zachowuja oryginalne materialy drewna; figura.gd ukrywa je na planszy.
 [node name="SkoczekBialy" parent="Zawartosc" unique_id=315203469 instance=ExtResource("3_bialy")]
 transform = Transform3D(0.03179, 0, 0, 0, 0.03179, 0, 0, 0, 0.03179, 0, 0, 0)
 
 [node name="SkoczekCzarny" parent="Zawartosc" unique_id=315203470 instance=ExtResource("4_czarny")]
 transform = Transform3D(0.03179, 0, 0, 0, 0.03179, 0, 0, 0, 0.03179, 0, 0, 0)
+
+[node name="PionekBialy" type="Node3D" parent="Zawartosc"]
+scale = Vector3(0.026, 0.026, 0.026)
+script = ExtResource("6_pionek")
+
+[node name="Model" parent="Zawartosc/PionekBialy" instance=ExtResource("5_pionek")]
+
+[node name="PionekCzarny" type="Node3D" parent="Zawartosc"]
+scale = Vector3(0.026, 0.026, 0.026)
+script = ExtResource("6_pionek")
+
+[node name="Model" parent="Zawartosc/PionekCzarny" instance=ExtResource("5_pionek")]
+
+[node name="KrolowaBiala" type="Node3D" parent="Zawartosc"]
+rotation = Vector3(0, 1.5707963, 0)
+scale = Vector3(0.0325, 0.0325, 0.0325)
+script = ExtResource("6_pionek")
+
+[node name="Model" parent="Zawartosc/KrolowaBiala" instance=ExtResource("7_krolowa")]
+
+[node name="KrolowaCzarna" type="Node3D" parent="Zawartosc"]
+rotation = Vector3(0, 1.5707963, 0)
+scale = Vector3(0.0325, 0.0325, 0.0325)
+script = ExtResource("6_pionek")
+
+[node name="Model" parent="Zawartosc/KrolowaCzarna" instance=ExtResource("7_krolowa")]
+
+[node name="KrolBialy" type="Node3D" parent="Zawartosc"]
+rotation = Vector3(0, 1.5707963, 0)
+scale = Vector3(0.0325, 0.0325, 0.0325)
+script = ExtResource("6_pionek")
+
+[node name="Model" parent="Zawartosc/KrolBialy" instance=ExtResource("8_krol")]
+
+[node name="KrolCzarny" type="Node3D" parent="Zawartosc"]
+rotation = Vector3(0, 1.5707963, 0)
+scale = Vector3(0.0325, 0.0325, 0.0325)
+script = ExtResource("6_pionek")
+
+[node name="Model" parent="Zawartosc/KrolCzarny" instance=ExtResource("8_krol")]
+
+[node name="GoniecBialy" type="Node3D" parent="Zawartosc"]
+rotation = Vector3(0, 1.5707963, 0)
+scale = Vector3(0.027625, 0.027625, 0.027625)
+script = ExtResource("6_pionek")
+
+[node name="Model" parent="Zawartosc/GoniecBialy" instance=ExtResource("9_goniec")]
+
+[node name="GoniecCzarny" type="Node3D" parent="Zawartosc"]
+rotation = Vector3(0, 1.5707963, 0)
+scale = Vector3(0.027625, 0.027625, 0.027625)
+script = ExtResource("6_pionek")
+
+[node name="Model" parent="Zawartosc/GoniecCzarny" instance=ExtResource("9_goniec")]
 
 ; Sprite nie rzuca prostokatnego cienia: robi to niewidoczna kopia modelu.
 [node name="Cien" type="Node3D" parent="Zawartosc" unique_id=1304772915]

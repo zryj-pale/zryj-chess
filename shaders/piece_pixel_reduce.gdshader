@@ -1,7 +1,7 @@
 shader_type canvas_item;
 render_mode unshaded;
 
-// Ink is already drawn at 160x160. Preserve it across the entire 2x2
+// Ink is already drawn at twice the output resolution. Preserve the entire 2x2
 // footprint instead of throwing away three samples during pixelisation.
 // All other colours retain nearest sampling; no blur or temporal trails.
 uniform sampler2D source_texture : source_color, filter_nearest, repeat_disable;

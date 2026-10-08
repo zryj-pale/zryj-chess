@@ -35,6 +35,9 @@ static func description(id: String) -> String:
 	return str(CARDS.get(id, {}).get("description", "Bez aktywnej karty."))
 
 static func has(cards: Dictionary, color: String, id: String) -> bool:
+	# Sandbox can enable several independent cards per side.
+	if cards.get(color) is Array:
+		return id in cards[color]
 	return str(cards.get(color, "")) == id
 
 static func any_has(cards: Dictionary, id: String) -> bool:

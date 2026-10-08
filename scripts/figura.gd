@@ -4,8 +4,7 @@ extends Node3D
 @export var kolor: String
 
 # Modele stoją podstawą na kafelku. Ich rzeczywisty widok perspektywiczny
-# jest renderowany w 80×80, także podczas ruchu.
-const TYP_Z_MODELEM := "S" # na razie tylko skoczek ma modele
+# jest renderowany ze wspólną gęstością pikseli, także podczas ruchu.
 const PIECE_Y := 0.5 # main.gd/ustawianie.gd stawiają figurę pół kratki nad płytą
 const MODEL_SPRITE := preload("res://scripts/piece_pixel_render.gd")
 
@@ -68,14 +67,27 @@ func promocja(typ_figury) -> void:
 	_zastosuj_typ()
 
 func _modele() -> Array[Node3D]:
-	return [$Zawartosc/SkoczekBialy, $Zawartosc/SkoczekCzarny]
+	return [$Zawartosc/SkoczekBialy, $Zawartosc/SkoczekCzarny,
+		$Zawartosc/PionekBialy, $Zawartosc/PionekCzarny,
+		$Zawartosc/KrolowaBiala, $Zawartosc/KrolowaCzarna,
+		$Zawartosc/KrolBialy, $Zawartosc/KrolCzarny,
+		$Zawartosc/GoniecBialy, $Zawartosc/GoniecCzarny]
 
 # Czarny kolor dostaje model czarny, każdy inny biały - figura nigdy nie zostaje
 # bez bryły, nawet gdyby kiedyś doszedł typ bez własnego modelu.
 func model_dla(typ_figury: String, kolor_figury: String) -> Node3D:
-	if typ_figury != TYP_Z_MODELEM:
-		return null
-	return $Zawartosc/SkoczekCzarny if kolor_figury == "c" else $Zawartosc/SkoczekBialy
+	match typ_figury:
+		"S":
+			return $Zawartosc/SkoczekCzarny if kolor_figury == "c" else $Zawartosc/SkoczekBialy
+		"P":
+			return $Zawartosc/PionekCzarny if kolor_figury == "c" else $Zawartosc/PionekBialy
+		"H":
+			return $Zawartosc/KrolowaCzarna if kolor_figury == "c" else $Zawartosc/KrolowaBiala
+		"K":
+			return $Zawartosc/KrolCzarny if kolor_figury == "c" else $Zawartosc/KrolBialy
+		"G":
+			return $Zawartosc/GoniecCzarny if kolor_figury == "c" else $Zawartosc/GoniecBialy
+	return null
 
 func _zastosuj_typ() -> void:
 	var model := model_dla(typ, kolor)
@@ -88,7 +100,9 @@ func _zastosuj_typ() -> void:
 	if model != null:
 		_model_sprite = MODEL_SPRITE.new()
 		$Zawartosc.add_child(_model_sprite)
-		_model_sprite.configure(model)
+		# The knight's broad faces read brighter than the other wooden models.
+		var wood_tint := Color(0.88, 0.88, 0.88) if typ == "S" else Color.WHITE
+		_model_sprite.configure(model, true, wood_tint)
 	($Zawartosc/tekstura as Sprite3D).visible = model == null
 	if model == null:
 		var nazwa: String = NAZWY.get(typ + kolor, NAZWY["Pb"])

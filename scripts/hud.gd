@@ -13,6 +13,14 @@ func _process(_delta: float) -> void:
 	var main = get_tree().get_first_node_in_group("game_main")
 	if not main:
 		return
+	if main.sandbox:
+		bialy_label.text = ""
+		czarny_label.text = ""
+		bialy_label.modulate = AKTYWNY_KOLOR
+		czarny_label.modulate = AKTYWNY_KOLOR
+		tura_label.text = "Sandbox — bez tur"
+		cards_label.text = "Aktywne karty: Białe %d · Czarne %d" % [main.active_cards["b"].size(), main.active_cards["c"].size()]
+		return
 	var na_ruchu := str(main.kolor_posuniecia)
 	bialy_label.text = _wiersz_strony(main, "b")
 	czarny_label.text = _wiersz_strony(main, "c")

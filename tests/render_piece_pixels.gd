@@ -4,6 +4,8 @@ extends SceneTree
 # Captures are saved under .godot/ for visual inspection; no profile is changed.
 const PIECE = preload("res://scenes/figura.tscn")
 var failures := 0
+# Pass -- H, -- P, -- K or -- G to exercise the other models with the same GPU checks.
+var piece_type: String = OS.get_cmdline_user_args()[0] if not OS.get_cmdline_user_args().is_empty() else "S"
 
 func _init() -> void:
 	call_deferred("run")
@@ -30,10 +32,11 @@ func run() -> void:
 	camera.position = Vector3(0, 4, 3)
 	camera.look_at(Vector3.ZERO)
 	camera.current = true
+	await check_shared_density(board, camera)
 	var pieces: Array = []
 	for color in ["b", "c"]:
 		var piece = PIECE.instantiate()
-		piece.typ = "S"
+		piece.typ = piece_type
 		piece.kolor = color
 		board.add_child(piece)
 		piece.position = Vector3(-0.7 if color == "b" else 0.7, 0.5, 0)
@@ -42,15 +45,15 @@ func run() -> void:
 	await frames()
 	for piece in pieces:
 		var sprite = piece._model_sprite
-		check(sprite.capture.size == Vector2i(160, 160), "Model and outline must be rendered before pixelisation")
-		check(sprite.geometry_capture != null and sprite.geometry_capture.size == Vector2i(160, 160), "Internal edges need a matching normal/depth capture")
+		check(sprite.capture.size == Vector2i.ONE * sprite.render_resolution * sprite.SOURCE_SCALE, "Model and outline must be rendered before pixelisation")
+		check(sprite.geometry_capture != null and sprite.geometry_capture.size == Vector2i.ONE * sprite.render_resolution * sprite.SOURCE_SCALE, "Internal edges need a matching normal/depth capture")
 		check(sprite.geometry_capture.use_hdr_2d, "Geometry data must stay linear and retain floating-point depth precision")
 		check(sprite.outline_horizontal != null and sprite.outline_composite != null, "The capture must contain both continuous outline passes")
 		var image: Image = sprite.texture.get_image()
-		check(image.get_size() == Vector2i(80, 80), "Capture must be exactly 80x80")
+		check(image.get_size() == Vector2i.ONE * sprite.render_resolution, "Capture must use the shared pixel density")
 		var occupied := image.get_used_rect()
 		check(occupied.has_area(), "Model capture must not be transparent/empty")
-		check(occupied.position.x > 0 and occupied.position.y > 0 and occupied.end.x < 80 and occupied.end.y < 80, "Model must fit inside the capture")
+		check(occupied.position.x > 0 and occupied.position.y > 0 and occupied.end.x < image.get_width() and occupied.end.y < image.get_height(), "Model must fit inside the capture")
 		image.save_png("res://.godot/sprite_80_%s.png" % piece.kolor)
 		var original := image.get_data()
 		if sprite.TRIANGLE_EDGES_ENABLED:
@@ -61,8 +64,8 @@ func run() -> void:
 			await frames()
 			var plain: Image = sprite.texture.get_image()
 			var faint_pixels := 0
-			for y in 80:
-				for x in 80:
+			for y in sprite.render_resolution:
+				for x in sprite.render_resolution:
 					var before := plain.get_pixel(x, y)
 					var after := image.get_pixel(x, y)
 					check(absf(before.a - after.a) < 0.005, "Triangle lines must not change model transparency")
@@ -108,12 +111,12 @@ func run() -> void:
 		check((contents.transform * Vector3(0, -0.5, 0)).is_equal_approx(drift + Vector3(0, -0.5, 0)), "Foot must remain on the tilted tile")
 		for corner in sprite._corners:
 			var uv: Vector2 = sprite.capture_camera.unproject_position(corner) / float(sprite.SOURCE_SCALE)
-			var plane_point: Vector3 = Vector3(uv.x - 40.0, 40.0 - uv.y, 0) * sprite.pixel_size
+			var plane_point: Vector3 = Vector3(uv.x - sprite.render_resolution * 0.5, sprite.render_resolution * 0.5 - uv.y, 0) * sprite.pixel_size
 			var actual := camera.unproject_position(sprite.to_global(plane_point))
 			var expected := camera.unproject_position(contents.to_global(corner))
 			check(actual.distance_to(expected) < 0.02, "Pixel image must match real 3D projection, including the foot")
 	board.get_texture().get_image().save_png("res://.godot/sprite_80_board.png")
-	# Black online view photographs the opposite side, still into 80x80.
+	# Black online view retains the same world pixel density.
 	camera.position = Vector3(0, 4, -3)
 	camera.look_at(Vector3.ZERO)
 	await frames()
@@ -121,13 +124,13 @@ func run() -> void:
 		var image: Image = piece._model_sprite.texture.get_image()
 		check(image.get_used_rect().has_area(), "Flipped online camera must show the model")
 		image.save_png("res://.godot/sprite_80_flipped_%s.png" % piece.kolor)
-		piece.promocja("H")
+		piece.promocja("W")
 		check(piece._model_sprite == null, "Changing to a 2D piece must remove the model sprite")
 		check(piece.get_node("Zawartosc/tekstura").visible, "Legacy atlas pieces must remain visible")
-		piece.promocja("S")
+		piece.promocja(piece_type)
 	await frames()
 	for piece in pieces:
-		check(piece._model_sprite.texture.get_image().get_used_rect().has_area(), "Promotion to knight must create a visible capture")
+		check(piece._model_sprite.texture.get_image().get_used_rect().has_area(), "Promotion to a model piece must create a visible capture")
 	# Inspect the ears and underside from a full orbit, including shallow views.
 	var orbit := Image.create(6 * 80, 4 * 80, false, Image.FORMAT_RGBA8)
 	orbit.fill(Color(0.65, 0.65, 0.65))
@@ -141,9 +144,9 @@ func run() -> void:
 			var sprite = pieces[0]._model_sprite
 			var image: Image = sprite.texture.get_image()
 			var occupied := image.get_used_rect()
-			check(occupied.has_area(), "Orbit capture must show the knight")
-			check(occupied.position.x > 0 and occupied.position.y > 0 and occupied.end.x < 80 and occupied.end.y < 80, "Orbit outline must fit inside the capture")
-			orbit.blend_rect(image, Rect2i(0, 0, 80, 80), Vector2i((angle % 6) * 80, (elevation * 2 + angle / 6) * 80))
+			check(occupied.has_area(), "Orbit capture must show the model")
+			check(occupied.position.x > 0 and occupied.position.y > 0 and occupied.end.x < image.get_width() and occupied.end.y < image.get_height(), "Orbit outline must fit inside the capture")
+			orbit.blend_rect(thumbnail(image), Rect2i(0, 0, 80, 80), Vector2i((angle % 6) * 80, (elevation * 2 + angle / 6) * 80))
 	orbit.resize(960, 640, Image.INTERPOLATE_NEAREST)
 	orbit.save_png("res://.godot/sprite_80_orbit.png")
 	# Small tile motion used to move pre-rendered ink between nearest samples.
@@ -158,7 +161,7 @@ func run() -> void:
 		await frames()
 		for piece in pieces:
 			check_ink_survives(piece._model_sprite)
-		motion.blend_rect(pieces[0]._model_sprite.texture.get_image(), Rect2i(0, 0, 80, 80), Vector2i((phase % 6) * 80, (phase / 6) * 80))
+		motion.blend_rect(thumbnail(pieces[0]._model_sprite.texture.get_image()), Rect2i(0, 0, 80, 80), Vector2i((phase % 6) * 80, (phase / 6) * 80))
 	motion.resize(960, 320, Image.INTERPOLATE_NEAREST)
 	motion.save_png("res://.godot/sprite_80_motion.png")
 	board.queue_free()
@@ -170,7 +173,7 @@ func run() -> void:
 		var scene_board: SubViewport = scene.get_node("BoardViewportContainer/BoardViewport")
 		for color in ["b", "c"]:
 			var piece = PIECE.instantiate()
-			piece.typ = "S"
+			piece.typ = piece_type
 			piece.kolor = color
 			scene.get_node("BoardViewportContainer/BoardViewport/BoardRoot").add_child(piece)
 			piece.position = Vector3(3 if color == "b" else 4, 0.5, 4)
@@ -178,7 +181,7 @@ func run() -> void:
 		scene_board.get_texture().get_image().save_png("res://.godot/sprite_80_%s.png" % scene_path.get_file().get_basename())
 		scene.queue_free()
 		await process_frame
-	print("Sprite 80 GPU checks: %d failures" % failures)
+	print("Piece GPU checks: %d failures" % failures)
 	quit(1 if failures else 0)
 
 func is_ink(color: Color) -> bool:
@@ -189,8 +192,8 @@ func check_ink_survives(sprite: Sprite3D) -> void:
 	var reduced: Image = sprite.texture.get_image()
 	var lost := 0
 	var changed_fill := 0
-	for y in 80:
-		for x in 80:
+	for y in sprite.render_resolution:
+		for x in sprite.render_resolution:
 			var ink := false
 			for dy in 2:
 				for dx in 2:
@@ -208,7 +211,7 @@ func check_ink_survives(sprite: Sprite3D) -> void:
 func check_base_center(piece: Node3D) -> void:
 	# Check the complete plinth, including its higher opposite edge. Checking
 	# only the very lowest vertices missed a 0.28-tile horizontal offset.
-	var model: Node3D = piece.model_dla("S", piece.kolor)
+	var model: Node3D = piece.model_dla(piece.typ, piece.kolor)
 	var points: Array[Vector3] = []
 	var low := INF
 	var high := -INF
@@ -228,3 +231,30 @@ func check_base_center(piece: Node3D) -> void:
 			maximum = maximum.max(Vector2(point.x, point.z))
 	check(((minimum + maximum) * 0.5).length() < 0.002, "Whole base must be centered on the tile, not its lowest edge")
 	check(absf(low + 0.5) < 0.0001, "Base must touch tile after centering and scaling")
+
+func thumbnail(source: Image) -> Image:
+	var result := source.duplicate() as Image
+	result.resize(80, 80, Image.INTERPOLATE_NEAREST)
+	return result
+
+func check_shared_density(board: SubViewport, camera: Camera3D) -> void:
+	var expected_pixel := -1.0
+	for kind in ["P", "S", "G", "H", "K"]:
+		for color in ["b", "c"]:
+			var piece = PIECE.instantiate()
+			piece.typ = kind
+			piece.kolor = color
+			piece.position = Vector3(0, 0.5, 0)
+			board.add_child(piece)
+			var model: Node3D = piece.model_dla(kind, color)
+			var original_transform := model.transform
+			await frames()
+			var sprite = piece._model_sprite
+			var origin := camera.unproject_position(sprite.global_position)
+			var pixel := camera.unproject_position(sprite.to_global(Vector3(sprite.pixel_size, 0, 0))).distance_to(origin)
+			if expected_pixel < 0:
+				expected_pixel = pixel
+			check(absf(pixel - expected_pixel) < 0.001, "All models must have equal projected texel sizes at the same tile")
+			check(model.transform.is_equal_approx(original_transform), "Pixel density must not change the model scale or placement")
+			piece.queue_free()
+			await process_frame

@@ -60,7 +60,8 @@ var czarny_tiles := 2
 var game_finished := false
 var input_enabled := false
 var coin_window = null
-var remote_coin_launch_seed := -1
+var coin_finished := false
+var queued_board_actions: Array[Dictionary] = []
 var _prev_mouse_pressed := false
 var active_cards := {"b": "", "c": ""}
 var duck_position := Vector2i(-99, -99)
@@ -80,8 +81,52 @@ var board_max := 7
 var bialy_holes := 0
 var czarny_holes := 0
 var holes: Array[Vector2i] = []
+var sandbox := false
+var sandbox_rules := false
+var sandbox_piece := ""
+var sandbox_color := "b"
+var sandbox_ui: CanvasLayer
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not sandbox or Ustawienia.is_open() or promotion_pending or sandbox_ui.blocks_board():
+		return
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+		sandbox_remove_at(_pole_pod_myszka())
+		get_viewport().set_input_as_handled()
+
+func sandbox_remove_at(pole: Vector2i) -> void:
+	if not sandbox:
+		return
+	_cancel_grab()
+	var target = stoi_figura(pole)
+	if target:
+		zbicie(target)
+	if pole == duck_position:
+		duck_position = Vector2i(-99, -99)
+		duck_marker.hide()
+	_refresh_match_tint()
+	odswiez_podpowiedzi()
+
+func sandbox_set_card(color: String, id: String, enabled: bool) -> void:
+	if not sandbox or color not in ["b", "c"] or not CardRegistry.CARDS.has(id):
+		return
+	_cancel_grab()
+	if enabled and id not in active_cards[color]:
+		active_cards[color].append(id)
+	elif not enabled:
+		active_cards[color].erase(id)
+	board_min = CardHooks.board_min(active_cards)
+	board_max = CardHooks.board_max(active_cards)
+	# Preserve edited outer squares when disabling the expansion card.
+	if not CardRegistry.any_has(active_cards, "duck_chess"):
+		duck_position = Vector2i(-99, -99)
+		duck_marker.hide()
+	_center_camera()
+	odswiez_podpowiedzi()
 
 func _ready() -> void:
+	sandbox = PozycjaOsobista.local_sandbox and not NetworkManager.is_online
+	PozycjaOsobista.local_sandbox = false
 	add_to_group("game_main")
 	_add_menu_background()
 	_init_tile_materials()
@@ -109,6 +154,15 @@ func _ready() -> void:
 		_refresh_player_colors()
 		_refresh_match_tint()
 		start_online_match()
+	elif sandbox:
+		active_cards = {"b": [], "c": []}
+		player_nicknames = {"b": PozycjaOsobista.nickname, "c": PozycjaOsobista.nickname}
+		_refresh_player_colors()
+		_refresh_match_tint()
+		input_enabled = true
+		sandbox_ui = preload("res://scripts/sandbox_panel.gd").new()
+		sandbox_ui.game = self
+		add_child(sandbox_ui)
 	else:
 		_show_loadout_picker()
 
@@ -140,7 +194,11 @@ func _center_screen_control(control: Control, size: Vector2) -> void:
 # to the container. Viewport3D.fit_to_pixels() is what decides how big that
 # actually is in pixels, and why it is not simply the 2D size.
 func _on_window_resized() -> void:
-	Viewport3D.fit_to_pixels(board_container, Rect2(Vector2.ZERO, get_viewport_rect().size))
+	var area := Rect2(Vector2.ZERO, get_viewport_rect().size)
+	if sandbox:
+		area.position.y = 76
+		area.size.y = maxf(1, area.size.y - 214)
+	Viewport3D.fit_to_pixels(board_container, area)
 	_center_camera()
 
 func _init_tile_materials() -> void:
@@ -164,6 +222,9 @@ func _center_camera() -> void:
 	camera_rig.position = Vector3(center, 0.0, center) * TILE_SIZE_3D
 	camera_rig.rotation = Vector3(0.0, PI if board_flipped else 0.0, 0.0)
 	var half := (board_max - board_min + 1) * TILE_SIZE_3D * 0.5
+	if sandbox:
+		for pole in dostepne_pola:
+			half = maxf(half, maxf(absf(pole.x - center), absf(pole.y - center)) + 0.5)
 	BoardTile.focus_lighting(board_root, Vector3(center, 0.0, center) * TILE_SIZE_3D, half)
 	_place_camera(half, half)
 
@@ -318,33 +379,48 @@ func _begin_local_match(white_index: int, black_index: int) -> void:
 	start_local_match()
 
 func start_local_match() -> void:
-	var coin_result := "orzel" if randf() < 0.5 else "reszka"
-	kolor_posuniecia = GameRules.starting_turn(_wire_pieces("b"), _wire_pieces("c"), coin_result)
-	_show_coin(coin_result, true)
+	_show_coin(true)
 
 func start_online_match() -> void:
-	kolor_posuniecia = NetworkManager.initial_turn
-	_show_coin(NetworkManager.coin_result, NetworkManager.is_host)
+	_show_coin(NetworkManager.is_host)
+	NetworkManager.submit_action({"type": "coin_ready"})
 
-func _show_coin(result: String, can_launch: bool) -> void:
+func _show_coin(can_launch: bool) -> void:
+	input_enabled = false
+	coin_finished = false
 	coin_window = OKNO.instantiate()
-	coin_window.configure(result, can_launch)
-	coin_window.throw_started.connect(_on_coin_throw_started)
+	coin_window.configure(can_launch, NetworkManager.is_online)
+	coin_window.snapshot_ready.connect(func(snapshot: Dictionary):
+		NetworkManager.submit_action({"type": "coin_snapshot", "snapshot": snapshot}))
+	coin_window.result_ready.connect(_on_coin_result)
 	coin_window.koniec_rzutu.connect(_on_coin_finished)
 	add_child(coin_window)
-	if remote_coin_launch_seed >= 0:
-		coin_window.launch(remote_coin_launch_seed)
-		remote_coin_launch_seed = -1
 
-func _on_coin_throw_started(throw_seed: int) -> void:
-	if NetworkManager.is_online and NetworkManager.is_host:
-		NetworkManager.submit_action({"type": "coin_launch", "seed": throw_seed})
+func _on_coin_result(result: String) -> void:
+	kolor_posuniecia = GameRules.starting_turn(_wire_pieces("b"), _wire_pieces("c"), result)
+	if NetworkManager.is_online:
+		NetworkManager.coin_result = result
+		NetworkManager.initial_turn = kolor_posuniecia
 
 func _on_coin_finished() -> void:
-	input_enabled = true
+	coin_finished = true
 	coin_window = null
+	if NetworkManager.is_online:
+		NetworkManager.submit_action({"type": "coin_finished"})
+	_try_finish_coin()
+
+func _try_finish_coin() -> void:
+	if input_enabled or not coin_finished:
+		return
+	if NetworkManager.is_online and not NetworkManager.coin_peer_finished:
+		return
+	input_enabled = true
 	if czy_szach(kolor_posuniecia):
 		$dzwiek/szach.play()
+	var actions := queued_board_actions.duplicate()
+	queued_board_actions.clear()
+	for action in actions:
+		_on_network_action(action)
 
 func _process(_delta: float) -> void:
 	# Kept ahead of every early-out below: the board keeps floating while the
@@ -359,12 +435,18 @@ func _process(_delta: float) -> void:
 		if stan == Stany.GRAB:
 			_cancel_grab()
 		_update_hints()
+		_prev_mouse_pressed = Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 		return
 	if game_finished:
 		_update_hints()
 		return
 	if not input_enabled:
 		_update_hints()
+		_prev_mouse_pressed = Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+		return
+	if sandbox and sandbox_ui.blocks_board():
+		_cancel_grab()
+		_prev_mouse_pressed = Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 		return
 	var pole := _pole_pod_myszka()
 	var pressed := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
@@ -408,20 +490,30 @@ func stan_idle(pole: Vector2i, pressed: bool) -> void:
 		return
 	if Input.is_action_just_pressed("space"):
 		var tiles_left := bialy_tiles if kolor_posuniecia == "b" else czarny_tiles
-		if tiles_left > 0:
+		if sandbox or tiles_left > 0:
 			stan = Stany.PLACEMENT
 			return
 	if Input.is_action_just_pressed("hole"):
 		var holes_left := bialy_holes if kolor_posuniecia == "b" else czarny_holes
-		if holes_left > 0:
+		if sandbox or holes_left > 0:
 			stan = Stany.HOLE_PLACEMENT
 			return
 	if pressed and not _prev_mouse_pressed:
+		if sandbox and not sandbox_piece.is_empty():
+			if sandbox_piece == "duck":
+				if _can_place_duck(pole):
+					_apply_duck(pole)
+			else:
+				dodaj(sandbox_piece, sandbox_color, pole)
+			_refresh_match_tint()
+			return
 		var figura = stoi_figura(pole)
-		if figura and figura.kolor == kolor_posuniecia:
+		if figura and (sandbox or figura.kolor == kolor_posuniecia):
 			_begin_grab(figura)
 
 func _begin_grab(figura) -> void:
+	if sandbox:
+		kolor_posuniecia = figura.kolor
 	chwycona = figura
 	poczatkowe_pole = pozycja(figura)
 	stan = Stany.GRAB
@@ -451,7 +543,7 @@ func stan_select(pole: Vector2i, pressed: bool) -> void:
 	if not pressed or _prev_mouse_pressed:
 		return
 	var figura = stoi_figura(pole)
-	if figura and figura.kolor == kolor_posuniecia:
+	if figura and (sandbox or figura.kolor == kolor_posuniecia):
 		_begin_grab(figura)
 		return
 	if not ruch(wybrana, pole):
@@ -465,7 +557,7 @@ func stan_placement(pole: Vector2i, pressed: bool) -> void:
 		stan = Stany.IDLE
 		return
 	if pressed and not _prev_mouse_pressed:
-		if not pole_na_planszy(pole) and pole_w_granicach(pole) and not (pole in holes):
+		if not pole_na_planszy(pole) and pole_w_granicach(pole) and (sandbox or not (pole in holes)):
 			_apply_tile(pole)
 			if NetworkManager.is_online:
 				NetworkManager.submit_action({"type": "tile", "x": pole.x, "y": pole.y})
@@ -501,6 +593,21 @@ func stan_duck(pole: Vector2i, pressed: bool) -> void:
 			$dzwiek/zakaz.play()
 
 func ruch(figura, cel: Vector2i, from_network := false) -> bool:
+	if sandbox and not from_network and figura and not game_finished:
+		if not pole_na_planszy(cel) or cel == pozycja(figura):
+			return false
+		kolor_posuniecia = figura.kolor
+		if sandbox_rules:
+			if not moze_ruszyc(figura, cel):
+				return false
+			_apply_move(figura, cel)
+		else:
+			var occupant = stoi_figura(cel)
+			if occupant:
+				zbicie(occupant)
+			figura.position = _piece_position(cel)
+			_refresh_match_tint()
+		return true
 	if not figura or game_finished or duck_pending or figura.kolor != kolor_posuniecia:
 		return false
 	if not from_network and NetworkManager.is_online and figura.kolor != my_color:
@@ -567,6 +674,9 @@ func _on_promotion_chosen(piece_type: String) -> void:
 func _continue_after_move(mover: String) -> void:
 	_refresh_match_tint()
 	$dzwiek/ruch.play()
+	if sandbox:
+		stan = Stany.IDLE
+		return
 	var winner := CardHooks.win_condition_winner(active_cards, _rules_pieces(), dostepne_pola, mover)
 	if not winner.is_empty():
 		koniec_gry(winner)
@@ -600,7 +710,11 @@ func _finish_after_move(mover: String) -> void:
 		koniec_gry(CardHooks.stalemate_winner(active_cards, kolor_posuniecia))
 
 func _apply_tile(pole: Vector2i) -> void:
+	if sandbox:
+		holes.erase(pole)
 	dodaj_pole(pole)
+	if sandbox:
+		return
 	if kolor_posuniecia == "b":
 		bialy_tiles -= 1
 	else:
@@ -617,22 +731,29 @@ func _apply_hole(pole: Vector2i) -> void:
 		tiles[pole].queue_free()
 		tiles.erase(pole)
 	_hint_key = HINT_KEY_STALE
+	if sandbox:
+		return
 	if kolor_posuniecia == "b":
 		bialy_holes -= 1
 	else:
 		czarny_holes -= 1
 
 func _on_network_action(action: Dictionary) -> void:
-	match action.get("type", ""):
-		"coin_launch":
-			if not NetworkManager.is_host:
-				var throw_seed := int(action.get("seed", -1))
-				if throw_seed < 0:
-					return
-				if coin_window:
-					coin_window.launch(throw_seed)
-				else:
-					remote_coin_launch_seed = throw_seed
+	var action_type := str(action.get("type", ""))
+	if action_type == "coin_snapshot":
+		if not NetworkManager.is_host and coin_window and action.get("snapshot") is Dictionary:
+			coin_window.receive_snapshot(action["snapshot"])
+		return
+	if action_type == "coin_finished":
+		_try_finish_coin()
+		return
+	if action_type == "coin_ready":
+		return
+	# Reliable UDP may deliver the first move before the peer's finish message.
+	if not input_enabled:
+		queued_board_actions.append(action)
+		return
+	match action_type:
 		"move":
 			var from := Vector2i(int(action.get("from_x", -99)), int(action.get("from_y", -99)))
 			var to := Vector2i(int(action.get("to_x", -99)), int(action.get("to_y", -99)))
@@ -821,6 +942,11 @@ func _hint_signature() -> String:
 func _draw_move_hints(figura, from: Vector2i) -> void:
 	if not figura:
 		return
+	if sandbox and not sandbox_rules:
+		for cel in dostepne_pola:
+			if cel != from:
+				_spawn_hint(cel, move_hint_material)
+		return
 	# The rules snapshot is built with the moved piece pinned to `from`, not
 	# to wherever it currently sits: while it's being dragged its node is
 	# under the cursor, which would otherwise poison every legality check.
@@ -853,7 +979,7 @@ func _tile_placement_targets() -> Array[Vector2i]:
 	for x in range(board_min, board_max + 1):
 		for y in range(board_min, board_max + 1):
 			var pole := Vector2i(x, y)
-			if not pole_na_planszy(pole) and not (pole in holes):
+			if not pole_na_planszy(pole) and (sandbox or not (pole in holes)):
 				result.append(pole)
 	return result
 
@@ -938,7 +1064,7 @@ func _create_promotion_picker() -> void:
 	_center_screen_control(promotion_picker, Vector2(300, 70))
 
 func _can_place_duck(pole: Vector2i) -> bool:
-	return pole_na_planszy(pole) and pole != duck_position and stoi_figura(pole) == null and not GameRules.is_in_check(_rules_pieces(), dostepne_pola, kolor_posuniecia, active_cards, pole)
+	return pole_na_planszy(pole) and pole != duck_position and stoi_figura(pole) == null and (sandbox or not GameRules.is_in_check(_rules_pieces(), dostepne_pola, kolor_posuniecia, active_cards, pole))
 
 func _apply_duck(pole: Vector2i) -> void:
 	duck_position = pole
@@ -955,6 +1081,8 @@ func moze_promowac(figura) -> bool:
 	return pozycja(figura).y == GameRules.edge_row(dostepne_pola, figura.kolor)
 
 func koniec_gry(kolor_wygranej := "", from_network := false) -> void:
+	if sandbox:
+		return
 	if game_finished:
 		return
 	game_finished = true

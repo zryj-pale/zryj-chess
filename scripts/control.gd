@@ -1,9 +1,10 @@
 extends Control
 @export var wyrzucona = null
 signal koniec_rzutu
-signal throw_started(throw_seed: int)
+signal snapshot_ready(snapshot: Dictionary)
+signal result_ready(result: String)
 
-var forced_result := "orzel"
+var online := false
 var can_launch := true
 
 func _ready() -> void:
@@ -11,8 +12,8 @@ func _ready() -> void:
 	_set_viewport_size()
 	call_deferred("_set_viewport_size")
 	get_viewport().size_changed.connect(_set_viewport_size)
-	$SubViewportContainer/SubViewport/Node3D.configure(forced_result, can_launch)
-	$SubViewportContainer/SubViewport/Node3D.throw_started.connect(func(throw_seed: int): throw_started.emit(throw_seed))
+	$SubViewportContainer/SubViewport/Node3D.configure(can_launch, online)
+	$SubViewportContainer/SubViewport/Node3D.snapshot_ready.connect(func(snapshot: Dictionary): snapshot_ready.emit(snapshot))
 
 func _set_viewport_size() -> void:
 	var screen_size := get_viewport().get_visible_rect().size
@@ -25,17 +26,18 @@ func _set_viewport_size() -> void:
 	var subviewport: SubViewport = $SubViewportContainer/SubViewport
 	subviewport.size = Vector2i(screen_size)
 
-func configure(result: String, allow_launch: bool) -> void:
-	forced_result = result
+func configure(allow_launch: bool, is_online: bool) -> void:
 	can_launch = allow_launch
+	online = is_online
 	if is_node_ready():
-		$SubViewportContainer/SubViewport/Node3D.configure(forced_result, can_launch)
+		$SubViewportContainer/SubViewport/Node3D.configure(can_launch, online)
 
-func launch(throw_seed := -1) -> void:
-	$SubViewportContainer/SubViewport/Node3D.launch(throw_seed)
+func receive_snapshot(snapshot: Dictionary) -> void:
+	$SubViewportContainer/SubViewport/Node3D.receive_snapshot(snapshot)
 
 func _on_wyrzucona(strona: Variant) -> void:
 	wyrzucona = strona
+	result_ready.emit(str(strona))
 	await get_tree().create_timer(5).timeout
 	koniec_rzutu.emit()
 	queue_free()

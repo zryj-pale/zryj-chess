@@ -29,6 +29,13 @@ var editing_loadout_index := 0
 var nickname := ""
 var music_muted := false
 var show_legal_moves := true
+var skip_intro := false
+# Only a hand-off from Local; never persisted or used by online games.
+var local_sandbox := false
+
+func set_skip_intro(value: bool) -> void:
+	skip_intro = value
+	_save_profile()
 
 # action -> physical keycode. `defaults` is whatever project.godot shipped
 # with, captured before any saved override is applied, so "przywróć
@@ -187,6 +194,7 @@ func _load_profile() -> void:
 		nickname = str(profile.get_value(PROFILE_SECTION, PROFILE_NICKNAME_KEY, "")).strip_edges()
 		music_muted = bool(profile.get_value(PROFILE_SECTION, PROFILE_MUSIC_MUTED_KEY, false))
 		show_legal_moves = bool(profile.get_value(PROFILE_SECTION, PROFILE_LEGAL_MOVES_KEY, true))
+		skip_intro = bool(profile.get_value(PROFILE_SECTION, "skip_intro", false))
 		var saved_keybinds = profile.get_value(PROFILE_SECTION, PROFILE_KEYBINDS_KEY, {})
 		if saved_keybinds is Dictionary:
 			for action in keybinds.keys():
@@ -208,6 +216,7 @@ func _save_profile() -> void:
 	profile.set_value(PROFILE_SECTION, PROFILE_NICKNAME_KEY, nickname)
 	profile.set_value(PROFILE_SECTION, PROFILE_MUSIC_MUTED_KEY, music_muted)
 	profile.set_value(PROFILE_SECTION, PROFILE_LEGAL_MOVES_KEY, show_legal_moves)
+	profile.set_value(PROFILE_SECTION, "skip_intro", skip_intro)
 	profile.set_value(PROFILE_SECTION, PROFILE_KEYBINDS_KEY, keybinds)
 	profile.set_value(PROFILE_SECTION, PROFILE_LOADOUTS_KEY, loadouts)
 	profile.save(PROFILE_PATH)

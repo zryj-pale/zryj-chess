@@ -12,6 +12,7 @@ uniform bool triangle_edges_enabled = false;
 uniform float triangle_opacity : hint_range(0.0, 1.0) = 0.28;
 uniform int radius : hint_range(1, 8) = 5;
 uniform float normal_threshold : hint_range(0.01, 1.0) = 0.12;
+uniform float internal_edge_opacity : hint_range(0.0, 1.0) = 1.0;
 // Fraction of this piece's depth range, not camera distance.
 uniform float depth_threshold : hint_range(0.001, 0.2) = 0.015;
 
@@ -32,18 +33,28 @@ void fragment() {
 	}
 	vec4 model = textureLod(source_texture, UV, 0.0);
 	vec4 outline = vec4(0.0, 0.0, 0.0, mask);
-	vec4 geometry = textureLod(geometry_texture, UV, 0.0);
+	ivec2 geometry_size = textureSize(geometry_texture, 0);
+	ivec2 geometry_pixel = clamp(ivec2(UV * vec2(geometry_size)), ivec2(0), geometry_size - ivec2(1));
+	vec4 geometry = texelFetch(geometry_texture, geometry_pixel, 0);
 	float internal_edge = 0.0;
 	if (model.a > 0.5 && geometry.a > 0.5) {
 		vec3 center_normal = decode_normal(geometry.rg);
 		for (int x = -1; x <= 1; x++) {
 			for (int y = -1; y <= 1; y++) {
 				if (x != 0 || y != 0) {
-					vec4 neighbour = textureLod(geometry_texture, UV + vec2(float(x), float(y)) * TEXTURE_PIXEL_SIZE, 0.0);
+					// Half-texel nearest samples can round asymmetrically when the
+					// crop changes size, mistaking a flat depth slope for a crease.
+					// Fetch exact, symmetric neighbours; opacity controls delicate ink.
+					ivec2 neighbour_pixel = geometry_pixel + ivec2(x, y);
+					ivec2 opposite_pixel = geometry_pixel - ivec2(x, y);
+					if (any(lessThan(neighbour_pixel, ivec2(0))) || any(greaterThanEqual(neighbour_pixel, geometry_size)) || any(lessThan(opposite_pixel, ivec2(0))) || any(greaterThanEqual(opposite_pixel, geometry_size))) {
+						continue;
+					}
+					vec4 neighbour = texelFetch(geometry_texture, neighbour_pixel, 0);
 					if (neighbour.a > 0.5) {
 						vec3 neighbour_normal = decode_normal(neighbour.rg);
 						float normal_change = 1.0 - dot(center_normal, neighbour_normal);
-						vec4 opposite = textureLod(geometry_texture, UV - vec2(float(x), float(y)) * TEXTURE_PIXEL_SIZE, 0.0);
+						vec4 opposite = texelFetch(geometry_texture, opposite_pixel, 0);
 						// Subtract the continuing slope: a steep flat face is not an edge.
 						float depth_change = opposite.a > 0.5 ? abs(neighbour.b + opposite.b - 2.0 * geometry.b) : 0.0;
 						// Ink only one side of a crease, instead of both adjacent faces.
@@ -73,6 +84,6 @@ void fragment() {
 		}
 		model.rgb *= 1.0 - fine_edge * triangle_opacity;
 	}
-	model.rgb = mix(model.rgb, vec3(0.0), internal_edge);
+	model.rgb = mix(model.rgb, vec3(0.0), internal_edge * internal_edge_opacity);
 	COLOR = model + outline * (1.0 - model.a);
 }

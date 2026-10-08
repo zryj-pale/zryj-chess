@@ -19,6 +19,7 @@ var _root: Control
 var _panel: PanelContainer
 var _mute_check: CheckButton
 var _legal_moves_check: CheckButton
+var _skip_intro_check: CheckButton
 var _keybind_buttons := {} # action -> Button
 var _exit_button: Button
 var _capturing_action := ""
@@ -79,6 +80,10 @@ func _build_ui() -> void:
 	_mute_check.text = "Wycisz muzykę"
 	_mute_check.toggled.connect(func(value: bool): PozycjaOsobista.set_music_muted(value))
 	box.add_child(_mute_check)
+	_skip_intro_check = CheckButton.new()
+	_skip_intro_check.text = "Pomijaj intro przed menu głównym"
+	_skip_intro_check.toggled.connect(PozycjaOsobista.set_skip_intro)
+	box.add_child(_skip_intro_check)
 
 	_legal_moves_check = CheckButton.new()
 	_legal_moves_check.text = "Podświetlaj legalne ruchy"
@@ -127,6 +132,7 @@ func _build_ui() -> void:
 func open() -> void:
 	_capturing_action = ""
 	_mute_check.set_pressed_no_signal(PozycjaOsobista.music_muted)
+	_skip_intro_check.set_pressed_no_signal(PozycjaOsobista.skip_intro)
 	_legal_moves_check.set_pressed_no_signal(PozycjaOsobista.show_legal_moves)
 	_exit_button.visible = _current_match() != null
 	_refresh_keybind_labels()

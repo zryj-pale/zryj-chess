@@ -1,11 +1,15 @@
 extends Sprite3D
 
-# Crop the real perspective view of a model to a 80x80 render target. The
+# Crop the real perspective view using a shared pixel density. The
 # source model stays oriented to its tile, never rotated to face the camera.
-const RESOLUTION := 80
+const RESOLUTION := 80 # initial allocation, resized for shared world pixel density
 const SOURCE_SCALE := 2
 const SOURCE_RESOLUTION := RESOLUTION * SOURCE_SCALE
 const FRAME_MARGIN := 1.08
+# One texel spans this distance at the tile's foot plane for every model.
+# Larger pieces receive more texels, without changing their world transforms.
+const WORLD_TEXEL_SIZE := 0.015525 # 35% larger pixels, unchanged model sizes
+var render_resolution := RESOLUTION
 const FACE_SHADING := preload("res://scripts/piece_face_shading.gd")
 const GEOMETRY_DATA_SHADER := preload("res://shaders/piece_geometry_data.gdshader")
 const OUTLINE_HORIZONTAL_SHADER := preload("res://shaders/piece_outline_horizontal.gdshader")
@@ -31,8 +35,12 @@ var _geometry_material: ShaderMaterial
 var _corners: Array[Vector3] = []
 var _view_transform := Transform3D.IDENTITY
 var _has_frame := false
+var _delicate_edges := false
+var _wood_tint := Color.WHITE
 
-func configure(model: Node3D) -> void:
+func configure(model: Node3D, delicate_edges := false, wood_tint := Color.WHITE) -> void:
+	_delicate_edges = delicate_edges
+	_wood_tint = wood_tint
 	texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	shaded = false
 	alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
@@ -91,10 +99,13 @@ func configure(model: Node3D) -> void:
 	refresh_view()
 
 func _create_outline_pipeline() -> void:
+	# Fine contours leave room for wood detail. The caller can still select
+	# the original bold strokes by disabling delicate_edges.
+	var outline_radius := 1 if _delicate_edges else OUTLINE_RADIUS
 	var horizontal_material := ShaderMaterial.new()
 	horizontal_material.shader = OUTLINE_HORIZONTAL_SHADER
 	horizontal_material.set_shader_parameter("source_texture", capture.get_texture())
-	horizontal_material.set_shader_parameter("radius", OUTLINE_RADIUS)
+	horizontal_material.set_shader_parameter("radius", outline_radius)
 	outline_horizontal = _canvas_pass("OutlineHorizontal160", SOURCE_RESOLUTION, capture.get_texture(), horizontal_material)
 
 	var composite_material := ShaderMaterial.new()
@@ -102,9 +113,11 @@ func _create_outline_pipeline() -> void:
 	composite_material.set_shader_parameter("source_texture", capture.get_texture())
 	composite_material.set_shader_parameter("horizontal_mask", outline_horizontal.get_texture())
 	composite_material.set_shader_parameter("geometry_texture", geometry_capture.get_texture())
-	composite_material.set_shader_parameter("radius", OUTLINE_RADIUS)
+	composite_material.set_shader_parameter("radius", outline_radius)
+	if _delicate_edges:
+		composite_material.set_shader_parameter("internal_edge_opacity", 0.5)
 	composite_material.set_shader_parameter("triangle_edges_enabled", TRIANGLE_EDGES_ENABLED)
-	composite_material.set_shader_parameter("triangle_opacity", TRIANGLE_EDGE_OPACITY)
+	composite_material.set_shader_parameter("triangle_opacity", 0.14 if _delicate_edges else TRIANGLE_EDGE_OPACITY)
 	if triangle_capture != null:
 		composite_material.set_shader_parameter("triangle_texture", triangle_capture.get_texture())
 	outline_composite = _canvas_pass("OutlineComposite160", SOURCE_RESOLUTION, capture.get_texture(), composite_material)
@@ -146,6 +159,10 @@ func _copy_meshes(node: Node, origin: Node3D) -> void:
 			copy.name = "%sFill" % source.name
 			copy.transform = origin.global_transform.affine_inverse() * source.global_transform
 			copy.mesh = FACE_SHADING.bake(source, copy.basis)
+			# Tint only the wood fill; outline and geometry passes stay unchanged.
+			for surface in copy.mesh.get_surface_count():
+				var material := copy.mesh.surface_get_material(surface) as StandardMaterial3D
+				material.albedo_color *= _wood_tint
 			copy.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			capture.add_child(copy)
 			var geometry_copy := MeshInstance3D.new()
@@ -170,6 +187,19 @@ func _copy_meshes(node: Node, origin: Node3D) -> void:
 
 func _process(_delta: float) -> void:
 	refresh_view()
+
+func _resize_capture(resolution: int) -> void:
+	if render_resolution == resolution:
+		return
+	render_resolution = resolution
+	var source_size := Vector2i.ONE * resolution * SOURCE_SCALE
+	for viewport in [capture, geometry_capture, triangle_capture, outline_horizontal, outline_composite]:
+		if viewport != null:
+			viewport.size = source_size
+			if viewport == outline_horizontal or viewport == outline_composite:
+				viewport.get_child(0).size = Vector2(source_size)
+	pixel_capture.size = Vector2i.ONE * resolution
+	pixel_capture.get_child(0).size = Vector2.ONE * resolution
 
 func refresh_view() -> void:
 	if capture == null or _corners.is_empty():
@@ -203,6 +233,13 @@ func refresh_view() -> void:
 	visible = true
 	var extent := high - low
 	var frame_size := maxf(maxf(extent.x, extent.y) * FRAME_MARGIN, 0.00001)
+	# Measure density at the common tile foot, not each model's nearest face.
+	# Rounding expands only the transparent crop; model projection stays exact.
+	var foot_depth := maxf(-(inverse * Vector3(0, -0.5, 0)).z, near_plane)
+	var projected_texel := WORLD_TEXEL_SIZE * near_plane / foot_depth
+	var resolution := maxi(16, ceili(frame_size / projected_texel))
+	_resize_capture(resolution)
+	frame_size = float(resolution) * projected_texel
 	var center := (low + high) * 0.5
 	capture_camera.transform = view_transform
 	capture_camera.set_frustum(frame_size, center, near_plane, board_camera.far)
@@ -223,9 +260,9 @@ func refresh_view() -> void:
 	var distance := maxf(near_plane, closest_depth - 0.002)
 	var center_at_depth := Vector3(center.x * distance / near_plane, center.y * distance / near_plane, -distance)
 	transform = Transform3D(view_transform.basis, view_transform * center_at_depth)
-	pixel_size = frame_size * distance / near_plane / float(RESOLUTION)
+	pixel_size = frame_size * distance / near_plane / float(render_resolution)
 	# A stationary model/camera reuses the image. Movement changes perspective,
-	# but every new frame still ends as exactly 80x80 with preserved ink.
+	# but every new frame retains the same pixel density and preserved ink.
 	capture.render_target_update_mode = SubViewport.UPDATE_ONCE
 	geometry_capture.render_target_update_mode = SubViewport.UPDATE_ONCE
 	if triangle_capture != null:

@@ -57,8 +57,13 @@ var sign_container: SubViewportContainer
 var sign_viewport: SubViewport
 var sign_camera: Camera3D
 var signs: Array[MenuSign3D] = []
+var local_picker: AcceptDialog
 
 func _ready() -> void:
+	if PozycjaOsobista.skip_intro:
+		$VideoStreamPlayer.stop()
+		$VideoStreamPlayer.hide()
+		$IntroBackdrop.hide()
 	# This scene's own root Control fills the screen and, like any Control,
 	# defaults to MOUSE_FILTER_STOP - so it swallowed every click before it
 	# could reach _unhandled_input, where the signs are hit-tested, and none of
@@ -218,7 +223,7 @@ func _unhandled_input(event: InputEvent) -> void:
 # covers it later; in both cases the signs are not what the player is looking
 # at, so they neither light up nor answer clicks.
 func _signs_active() -> bool:
-	return not $VideoStreamPlayer.visible and not Ustawienia.is_open()
+	return not $VideoStreamPlayer.visible and not Ustawienia.is_open() and not (is_instance_valid(local_picker) and local_picker.visible)
 
 func _sign_at(canvas_point: Vector2) -> MenuSign3D:
 	for item in signs:
@@ -257,6 +262,22 @@ func _on_nickname_label_input(event: InputEvent) -> void:
 
 func _on_lokalna_pressed() -> void:
 	if not _save_nickname():
+		return
+	if not is_instance_valid(local_picker):
+		local_picker = AcceptDialog.new()
+		local_picker.title = "Local — wybierz tryb"
+		local_picker.dialog_text = "Versus: mecz lokalny\nSandbox: swobodna plansza i kolekcja kart"
+		local_picker.get_ok_button().text = "Wróć"
+		local_picker.add_button("Versus", true, "versus")
+		local_picker.add_button("Sandbox", true, "sandbox")
+		local_picker.custom_action.connect(_start_local_mode)
+		add_child(local_picker)
+	local_picker.popup_centered(Vector2i(360, 160))
+
+func _start_local_mode(mode: StringName) -> void:
+	PozycjaOsobista.local_sandbox = mode == &"sandbox"
+	if PozycjaOsobista.local_sandbox:
+		get_tree().change_scene_to_file("res://scenes/main.tscn")
 		return
 	if not PozycjaOsobista.any_loadout_has_king():
 		# No playable army yet in either slot - send them to set one up
