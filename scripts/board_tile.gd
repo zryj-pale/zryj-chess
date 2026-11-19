@@ -73,9 +73,36 @@ static var _unit_center := Vector3.ZERO
 static var _unit_flip := false # see _load_model()
 static var _materials := {} # bool (is_light) -> StandardMaterial3D
 
+# Entrance animation: a tile placed mid-match rises up out of the void
+# instead of popping into existence. Measured from the moment it starts;
+# negative means "not currently rising" (the common case).
+const RISE_DURATION := 0.45
+const RISE_DROP := 1.1 # how far below its resting height the plate starts, in cell units
+
+# Collapse animation: played instead of a plain queue_free() when a hole is
+# punched through the square. The plate tips over and drops away while a
+# handful of chunks break off and scatter, selling "crumbling" rather than
+# "sinking smoothly" - see _spawn_debris().
+const COLLAPSE_DURATION := 0.6
+const COLLAPSE_FALL := 2.4 # how far the plate drops while collapsing, in cell units
+const COLLAPSE_SPIN := 2.5 # average tumble rate, radians/sec
+const DEBRIS_COUNT := 5
+const DEBRIS_FALL := 1.8
+
 var pole := Vector2i.ZERO
 var base_position := Vector3.ZERO
 var _phases := PackedFloat32Array()
+var _plate_size := 1.0
+var _plate_material: StandardMaterial3D = null
+
+var _rise_elapsed := -1.0
+
+var _collapsing := false
+var _collapse_elapsed := 0.0
+var _collapse_start_position := Vector3.ZERO
+var _collapse_start_rotation := Vector3.ZERO
+var _collapse_spin_axis := Vector3.UP
+var _collapse_spin_rate := 0.0
 
 # `light` picks which of the two textures the plate wears; `tile_size` is the
 # full cell size, inside which the plate is then inset (see TILE_FILL).
@@ -92,7 +119,9 @@ static func create(square: Vector2i, world_position: Vector3, tile_size: float, 
 	plate.name = "Plate"
 	plate.mesh = _mesh
 	plate.material_override = _material(light)
+	tile._plate_material = plate.material_override
 	var size := tile_size * TILE_FILL
+	tile._plate_size = size
 	plate.scale = _unit_scale * size
 	if _unit_flip:
 		plate.rotation = Vector3(PI, 0.0, 0.0)
@@ -102,26 +131,113 @@ static func create(square: Vector2i, world_position: Vector3, tile_size: float, 
 		tile.set_process(false)
 	return tile
 
+# Called right after create() for a tile appearing mid-match (a newly placed
+# square) rather than at board setup, so it visibly climbs up out of the void
+# instead of just appearing.
+func play_rise_in() -> void:
+	_rise_elapsed = 0.0
+
+# Called instead of queue_free() when a hole is punched through this square.
+# Starts the crumble-and-fall animation; the tile frees itself once it
+# finishes, so the caller just forgets about it (and should drop it from any
+# lookup table immediately, since the square is already gone from play).
+func play_collapse() -> void:
+	if _collapsing:
+		return
+	_collapsing = true
+	_collapse_elapsed = 0.0
+	_collapse_start_position = position
+	_collapse_start_rotation = rotation
+	_collapse_spin_axis = Vector3(
+		randf_range(-1.0, 1.0), randf_range(-0.3, 0.3), randf_range(-1.0, 1.0)).normalized()
+	_collapse_spin_rate = randf_range(0.6, 1.0) * COLLAPSE_SPIN * (1.0 if randf() < 0.5 else -1.0)
+	_spawn_debris()
+
 # How far this plate currently sits from its resting spot. Pieces standing on
 # it borrow this so they drift with their square instead of hovering over a
 # plate that has floated out from under them.
 func levitation_offset() -> Vector3:
 	return position - base_position
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if _collapsing:
+		_process_collapse(delta)
+		return
 	# Driven off the shared engine clock rather than an accumulated per-node
 	# delta, so every plate agrees on the phase of the motion - including
 	# across the two clients of an online match, where both players are
 	# supposed to be looking at the same board.
 	var t := float(Time.get_ticks_msec()) / 1000.0 * LEV_SPEED
+	var rise_y := 0.0
+	if _rise_elapsed >= 0.0:
+		_rise_elapsed += delta
+		var p := clampf(_rise_elapsed / RISE_DURATION, 0.0, 1.0)
+		rise_y = (_ease_out_back(p) - 1.0) * RISE_DROP
+		if p >= 1.0:
+			_rise_elapsed = -1.0
 	position = base_position + Vector3(
 		sin(t * RATE_DRIFT_X + _phases[1]) * LEV_DRIFT,
-		sin(t * RATE_RISE + _phases[0]) * LEV_RISE,
+		sin(t * RATE_RISE + _phases[0]) * LEV_RISE + rise_y,
 		sin(t * RATE_DRIFT_Z + _phases[2]) * LEV_DRIFT)
 	rotation = Vector3(
 		sin(t * RATE_TILT_X + _phases[3]) * LEV_TILT,
 		0.0,
 		sin(t * RATE_TILT_Z + _phases[4]) * LEV_TILT)
+
+# Takes over from the levitation above entirely while a tile falls apart -
+# the two motions have no reason to blend, since the plate is on its way out.
+func _process_collapse(delta: float) -> void:
+	_collapse_elapsed += delta
+	var p := clampf(_collapse_elapsed / COLLAPSE_DURATION, 0.0, 1.0)
+	var eased := _ease_in_cubic(p)
+	position = _collapse_start_position + Vector3(0.0, -eased * COLLAPSE_FALL, 0.0)
+	rotation = _collapse_start_rotation + _collapse_spin_axis * (_collapse_spin_rate * _collapse_elapsed)
+	scale = Vector3.ONE * (1.0 - eased)
+	if p >= 1.0:
+		queue_free()
+
+# A handful of small chunks that break off the plate and scatter as it
+# falls, so the square reads as crumbling apart rather than one piece
+# smoothly sinking. They are independent nodes, not children of the tile
+# (which is busy falling and shrinking under its own animation) - each gets
+# its own short tumble-and-fade-out tween and frees itself when that ends.
+func _spawn_debris() -> void:
+	var parent := get_parent()
+	if parent == null or _mesh == null:
+		return
+	var origin := global_position
+	for _i in DEBRIS_COUNT:
+		var chunk := MeshInstance3D.new()
+		chunk.mesh = _mesh
+		chunk.material_override = _plate_material
+		var chunk_scale := _plate_size * randf_range(0.12, 0.22)
+		chunk.scale = _unit_scale * chunk_scale
+		chunk.position = origin + Vector3(
+			randf_range(-_plate_size, _plate_size) * 0.4,
+			randf_range(-0.05, 0.1),
+			randf_range(-_plate_size, _plate_size) * 0.4)
+		chunk.rotation = Vector3(randf_range(0.0, TAU), randf_range(0.0, TAU), randf_range(0.0, TAU))
+		parent.add_child(chunk)
+		var spin := Vector3(randf_range(-6.0, 6.0), randf_range(-6.0, 6.0), randf_range(-6.0, 6.0))
+		var drop := Vector3(
+			randf_range(-0.5, 0.5), -DEBRIS_FALL * randf_range(0.8, 1.3), randf_range(-0.5, 0.5))
+		var duration := randf_range(0.5, 0.8)
+		var tween := chunk.create_tween().set_parallel(true)
+		tween.tween_property(chunk, "position", chunk.position + drop, duration)\
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tween.tween_property(chunk, "rotation", chunk.rotation + spin, duration)
+		tween.tween_property(chunk, "scale", Vector3.ZERO, duration)\
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tween.chain().tween_callback(chunk.queue_free)
+
+static func _ease_out_back(x: float) -> float:
+	const C1 := 1.70158
+	const C3 := C1 + 1.0
+	var y := x - 1.0
+	return 1.0 + C3 * y * y * y + C1 * y * y
+
+static func _ease_in_cubic(x: float) -> float:
+	return x * x * x
 
 # A stable pseudo-random offset per square, so the board looks irregular while
 # every plate keeps the same character for the whole match (and looks the same

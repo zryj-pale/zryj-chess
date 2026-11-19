@@ -712,7 +712,7 @@ func _finish_after_move(mover: String) -> void:
 func _apply_tile(pole: Vector2i) -> void:
 	if sandbox:
 		holes.erase(pole)
-	dodaj_pole(pole)
+	dodaj_pole(pole, true)
 	if sandbox:
 		return
 	if kolor_posuniecia == "b":
@@ -728,7 +728,7 @@ func _apply_hole(pole: Vector2i) -> void:
 	dostepne_pola.erase(pole)
 	holes.append(pole)
 	if tiles.has(pole):
-		tiles[pole].queue_free()
+		tiles[pole].play_collapse()
 		tiles.erase(pole)
 	_hint_key = HINT_KEY_STALE
 	if sandbox:
@@ -848,17 +848,19 @@ func pole_w_granicach(pole: Vector2i) -> bool:
 func pole_na_planszy(pole: Vector2i) -> bool:
 	return pole in dostepne_pola
 
-func dodaj_pole(pole: Vector2i) -> void:
+func dodaj_pole(pole: Vector2i, animate: bool = false) -> void:
 	if not pole_w_granicach(pole) or pole_na_planszy(pole) or pole in holes:
 		return
 	dostepne_pola.append(pole)
-	_spawn_tile(pole)
+	_spawn_tile(pole, animate)
 
-func _spawn_tile(pole: Vector2i) -> void:
+func _spawn_tile(pole: Vector2i, animate: bool = false) -> void:
 	var is_light := (pole.x + pole.y) % 2 == 0
 	var tile := BoardTile.create(pole, _tile_to_world(pole), TILE_SIZE_3D, is_light)
 	board_root.add_child(tile)
 	tiles[pole] = tile
+	if animate:
+		tile.play_rise_in()
 
 # Casts a ray from the camera through the mouse position onto the board's
 # ground plane (y=0) and returns the world hit point, or null if the ray
