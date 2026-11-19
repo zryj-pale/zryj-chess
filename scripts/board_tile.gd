@@ -82,19 +82,37 @@ const RISE_DROP := 1.1 # how far below its resting height the plate starts, in c
 # Collapse animation: played instead of a plain queue_free() when a hole is
 # punched through the square. Unlike the rise-in above this needs no ongoing
 # _process on the tile itself: the plate is immediately replaced by a handful
-# of irregular shard meshes - split outward from one off-centre point, like a
-# cracked window - that sit assembled with a hairline gap between them (the
-# "it cracks first" beat) before they let go and tumble away on their own
-# tweens. See _shatter().
+# of irregular shard meshes that sit assembled with a hairline gap between
+# them (the "it cracks first" beat) before they let go and tumble away on
+# their own tweens. No single break point - the footprint is recursively
+# split by random straight cuts (a small BSP fracture, see _crumble_split()),
+# the way a block of masonry crumbles into a handful of unevenly sized
+# chunks, rather than how a pane of glass shatters from one impact point.
+# See _shatter().
 const CRACK_DURATION := 0.14 # how long the cracks are visible before pieces let go
-const SHARD_FALL_DURATION := 0.55
 const SHARD_THICKNESS_RATIO := 0.1 # shard thickness, as a fraction of the plate size
 const SHARD_GAP := 0.05 # crack width, as a fraction of each shard's own size
-const SHARD_MIN_RAYS := 3 # random cracks radiating from the shatter point...
-const SHARD_MAX_RAYS := 4 # ...plus the plate's 4 corners, so this yields 7-8 shards
-const SHARD_FALL_DISTANCE := 2.0 # how far a shard drops while falling, in cell units
-const SHARD_OUTWARD := 0.9 # how far a shard drifts away from the shatter point, in cell units
-const SHARD_SPIN := 3.2 # average tumble rate, radians/sec
+const SPLIT_ROUNDS := 3
+const SPLIT_CHANCE := 0.8 # a piece's odds of splitting again each round
+const FALL_DURATION := 0.6
+const FALL_DISTANCE := 1.6 # how far a chunk drops while falling, in cell units
+const OUTWARD := 0.35 # chunks mostly just drop, rather than fly outward
+const SPIN := 2.2 # average tumble rate, radians/sec
+
+# The exposed break surface (the shard's side walls) is given its own flat,
+# duller material instead of reusing the plate's photo texture there - a
+# freshly broken edge reads as raw stone/mortar, not as more of the same
+# weathered top finish.
+const BROKEN_EDGE_COLOR := Color(0.56, 0.5, 0.45)
+
+# A small burst of dust motes at the crack, puffing up and fading as the
+# chunks let go - sells "crumbling masonry" alongside the sound effect.
+const DUST_COUNT := 14
+const DUST_LIFETIME := 0.55
+const DUST_COLOR := Color(0.62, 0.56, 0.5, 0.55)
+
+static var _broken_material: StandardMaterial3D = null
+static var _dust_mesh: QuadMesh = null
 
 var pole := Vector2i.ZERO
 var base_position := Vector3.ZERO
@@ -179,120 +197,179 @@ func _process(delta: float) -> void:
 		0.0,
 		sin(t * RATE_TILT_Z + _phases[4]) * LEV_TILT)
 
-# Splits the plate's footprint into irregular triangular shards radiating out
-# from one randomly placed point - like the lines of a cracked window - and
-# spawns a chunk mesh for each. Each shard is inset slightly toward its own
-# centre first, so the assembled set shows a hairline gap (the crack) right
-# away, before _animate_shard() lets it fly.
+# No single break point. The footprint is recursively cut by random straight
+# lines (a small BSP fracture - see _crumble_split()) into a handful of
+# unevenly sized chunks, the way a block of masonry crumbles rather than how
+# a pane of glass shatters. Each chunk drifts gently outward from the tile's
+# own centre as it falls, instead of blowing out from one impact point.
 func _shatter() -> void:
 	var parent := get_parent()
 	if parent == null or _plate_material == null or _plate_size <= 0.0:
 		return
 	var half := _plate_size * 0.5
-	# Kept well inside the square so every ray actually reaches an edge.
-	var origin2 := Vector2(randf_range(-half * 0.4, half * 0.4), randf_range(-half * 0.4, half * 0.4))
-	var ray_count := randi_range(SHARD_MIN_RAYS, SHARD_MAX_RAYS)
-	var points: Array[Vector2] = [
-		Vector2(-half, -half), Vector2(half, -half), Vector2(half, half), Vector2(-half, half)]
-	for i in ray_count:
-		var angle := (TAU / ray_count) * i + randf_range(-0.3, 0.3) * (TAU / ray_count)
-		points.append(_ray_to_square_edge(origin2, Vector2(cos(angle), sin(angle)), half))
-	# The corners and ray hits all lie on the (convex) square boundary, so
-	# sorting them by angle around an interior point recovers their true
-	# order along that boundary - consecutive points are then guaranteed
-	# boundary-adjacent, with nothing else from the list between them.
-	points.sort_custom(func(a, b): return (a - origin2).angle() < (b - origin2).angle())
+	var square := PackedVector2Array([
+		Vector2(-half, -half), Vector2(half, -half), Vector2(half, half), Vector2(-half, half)])
 	var tile_origin := global_position
-	for i in points.size():
-		var triangle := PackedVector2Array([origin2, points[i], points[(i + 1) % points.size()]])
-		_spawn_shard(parent, tile_origin, triangle, origin2, half)
+	for poly in _crumble_split(square, SPLIT_ROUNDS):
+		_spawn_shard(parent, tile_origin, poly, half)
+	_spawn_dust(parent, tile_origin)
 
-# Where a ray from `origin` in direction `dir` exits the square of half-width
-# `half` centred on the origin.
-static func _ray_to_square_edge(origin: Vector2, dir: Vector2, half: float) -> Vector2:
-	var t := INF
-	if dir.x > 0.0:
-		t = minf(t, (half - origin.x) / dir.x)
-	elif dir.x < 0.0:
-		t = minf(t, (-half - origin.x) / dir.x)
-	if dir.y > 0.0:
-		t = minf(t, (half - origin.y) / dir.y)
-	elif dir.y < 0.0:
-		t = minf(t, (-half - origin.y) / dir.y)
-	return origin + dir * t
+# Recursively cuts `poly` into smaller convex pieces: each round, every piece
+# has a SPLIT_CHANCE of being sliced in two by a random straight line through
+# roughly its own centre, and is otherwise left whole - which is what keeps
+# the final pieces unevenly sized instead of a uniform grid.
+static func _crumble_split(poly: PackedVector2Array, rounds: int) -> Array[PackedVector2Array]:
+	var polys: Array[PackedVector2Array] = [poly]
+	for _round in rounds:
+		var next: Array[PackedVector2Array] = []
+		for p in polys:
+			if p.size() >= 3 and randf() < SPLIT_CHANCE:
+				next.append_array(_split_polygon(p))
+			else:
+				next.append(p)
+		polys = next
+	return polys
 
-# Builds and launches one shard. `triangle` is in tile-footprint-local space
-# (XZ, centred on the tile); `shatter_origin2` is the point every shard's
-# outward drift is measured from, so the whole plate appears to blow apart
-# from that one spot rather than just downward.
-func _spawn_shard(parent: Node, tile_origin: Vector3, triangle: PackedVector2Array, shatter_origin2: Vector2, half: float) -> void:
-	var centroid := (triangle[0] + triangle[1] + triangle[2]) / 3.0
+# Cuts a convex polygon in two with a single random line (Sutherland-Hodgman
+# clip against both half-planes of that line). The cut point is jittered off
+# the centroid so the two resulting pieces are unevenly sized rather than
+# always splitting a piece exactly down the middle.
+static func _split_polygon(poly: PackedVector2Array) -> Array[PackedVector2Array]:
+	var centroid := Vector2.ZERO
+	for p in poly:
+		centroid += p
+	centroid /= poly.size()
+	var radius := 0.0
+	for p in poly:
+		radius = maxf(radius, (p - centroid).length())
+	var dir := Vector2.from_angle(randf_range(0.0, PI))
+	var cut := centroid + Vector2(randf_range(-0.2, 0.2), randf_range(-0.2, 0.2)) * radius
+	var a := _clip_polygon(poly, cut, dir)
+	var b := _clip_polygon(poly, cut, -dir)
+	var result: Array[PackedVector2Array] = []
+	if a.size() >= 3:
+		result.append(a)
+	if b.size() >= 3:
+		result.append(b)
+	if result.is_empty():
+		result.append(poly)
+	return result
+
+# Keeps the part of `poly` on the side of the line through `p` (direction
+# `dir`) where cross(dir, vertex - p) >= 0, inserting a new vertex at each
+# edge that crosses the line.
+static func _clip_polygon(poly: PackedVector2Array, p: Vector2, dir: Vector2) -> PackedVector2Array:
+	var result := PackedVector2Array()
+	var n := poly.size()
+	for i in n:
+		var a := poly[i]
+		var b := poly[(i + 1) % n]
+		var side_a := dir.cross(a - p)
+		var side_b := dir.cross(b - p)
+		if side_a >= 0.0:
+			result.append(a)
+		if (side_a >= 0.0) != (side_b >= 0.0):
+			result.append(a.lerp(b, side_a / (side_a - side_b)))
+	return result
+
+# Builds and launches one chunk. `poly` is in tile-footprint-local space (XZ,
+# centred on the tile). The chunk is a small wrapper Node3D holding two
+# meshes - a textured "cap" (top+bottom, the plate's own worn finish) and an
+# untextured "edge" (the side walls, in BROKEN_EDGE_COLOR) - so the freshly
+# exposed break reads as raw stone rather than more of the painted top.
+func _spawn_shard(parent: Node, tile_origin: Vector3, poly: PackedVector2Array, half: float) -> void:
+	var centroid := Vector2.ZERO
+	for p in poly:
+		centroid += p
+	centroid /= poly.size()
 	var inset := PackedVector2Array()
-	for p in triangle:
+	for p in poly:
 		inset.append(centroid + (p - centroid) * (1.0 - SHARD_GAP))
 	var local_poly := PackedVector2Array()
 	for p in inset:
 		local_poly.append(p - centroid)
 	var thickness := _plate_size * SHARD_THICKNESS_RATIO
-	var chunk := MeshInstance3D.new()
-	chunk.mesh = _build_shard_mesh(local_poly, inset, thickness, half)
-	chunk.material_override = _plate_material
+
+	var chunk := Node3D.new()
 	chunk.position = tile_origin + Vector3(centroid.x, 0.0, centroid.y)
 	parent.add_child(chunk)
-	_animate_shard(chunk, centroid, shatter_origin2)
 
-# First holds the shard in its cracked-but-assembled spot for CRACK_DURATION,
-# then lets it tumble away along the line from the shatter point through its
-# own centre (so pieces nearer the break point travel less, outer ones more)
-# while it falls and shrinks away, and finally frees itself.
-func _animate_shard(chunk: MeshInstance3D, centroid: Vector2, shatter_origin2: Vector2) -> void:
-	var outward2 := centroid - shatter_origin2
-	outward2 = outward2.normalized() if outward2.length() > 0.001 else Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized()
-	var drift := Vector3(outward2.x, 0.0, outward2.y) * SHARD_OUTWARD * randf_range(0.7, 1.3)
+	var cap := MeshInstance3D.new()
+	cap.mesh = _build_cap_mesh(local_poly, inset, thickness, half)
+	cap.material_override = _plate_material
+	chunk.add_child(cap)
+
+	var edge := MeshInstance3D.new()
+	edge.mesh = _build_edge_mesh(local_poly, thickness)
+	edge.material_override = _get_broken_material()
+	chunk.add_child(edge)
+
+	_animate_shard(chunk, centroid)
+
+# First holds the chunk in its cracked-but-assembled spot for CRACK_DURATION,
+# then lets it tumble away from the tile's own centre (so pieces nearer the
+# middle travel less, outer ones more) while it falls and shrinks away, and
+# finally frees itself.
+func _animate_shard(chunk: Node3D, centroid: Vector2) -> void:
+	var outward2 := centroid.normalized() if centroid.length() > 0.001 else Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized()
+	var drift := Vector3(outward2.x, 0.0, outward2.y) * OUTWARD * randf_range(0.7, 1.3)
 	drift.x += randf_range(-0.12, 0.12)
 	drift.z += randf_range(-0.12, 0.12)
-	drift.y = -SHARD_FALL_DISTANCE * randf_range(0.8, 1.3)
+	drift.y = -FALL_DISTANCE * randf_range(0.8, 1.3)
 	var spin := Vector3(
 		randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).normalized() \
-		* SHARD_SPIN * randf_range(0.6, 1.3)
+		* SPIN * randf_range(0.6, 1.3)
 	var start_pos := chunk.position
 	var start_rot := chunk.rotation
 	var tween := chunk.create_tween().set_parallel(true)
-	tween.tween_property(chunk, "position", start_pos + drift, SHARD_FALL_DURATION)\
+	tween.tween_property(chunk, "position", start_pos + drift, FALL_DURATION)\
 		.set_delay(CRACK_DURATION).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tween.tween_property(chunk, "rotation", start_rot + spin, SHARD_FALL_DURATION)\
+	tween.tween_property(chunk, "rotation", start_rot + spin, FALL_DURATION)\
 		.set_delay(CRACK_DURATION)
-	tween.tween_property(chunk, "scale", Vector3.ZERO, SHARD_FALL_DURATION * 0.4)\
-		.set_delay(CRACK_DURATION + SHARD_FALL_DURATION * 0.6)\
+	tween.tween_property(chunk, "scale", Vector3.ZERO, FALL_DURATION * 0.4)\
+		.set_delay(CRACK_DURATION + FALL_DURATION * 0.6)\
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tween.chain().tween_callback(chunk.queue_free)
 
-# A flat triangular prism: `poly` (and the thickness) are in shard-local
-# space (centred on the shard's own centroid, for clean rotation), while
-# `uv_src` carries the matching points in tile-footprint space so the shard
-# samples the right patch of the plate's own texture. Normals are written
-# explicitly rather than via generate_normals(), since cull_mode is disabled
-# on the shared material and so winding direction can't be relied on to say
-# which way a face is meant to point.
-static func _build_shard_mesh(poly: PackedVector2Array, uv_src: PackedVector2Array, thickness: float, half: float) -> ArrayMesh:
+# The textured top+bottom faces of one chunk, in shard-local space (centred
+# on the chunk's own centroid, for clean rotation); `uv_src` carries the
+# matching points in tile-footprint space so the chunk samples the right
+# patch of the plate's own texture. Normals are written explicitly rather
+# than via generate_normals(), since cull_mode is disabled on the shared
+# material and so winding direction can't be relied on to say which way a
+# face is meant to point.
+static func _build_cap_mesh(poly: PackedVector2Array, uv_src: PackedVector2Array, thickness: float, half: float) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for i in 3:
-		st.set_normal(Vector3.UP)
-		st.set_uv(_uv(uv_src[i], half))
-		st.add_vertex(Vector3(poly[i].x, 0.0, poly[i].y))
-	for i in [0, 2, 1]:
-		st.set_normal(Vector3.DOWN)
-		st.set_uv(_uv(uv_src[i], half))
-		st.add_vertex(Vector3(poly[i].x, -thickness, poly[i].y))
-	for i in poly.size():
-		_add_wall_quad(st, poly[i], poly[(i + 1) % poly.size()], uv_src[i], uv_src[(i + 1) % poly.size()], thickness, half)
+	var n := poly.size()
+	# Fan-triangulated from vertex 0, which is only valid for a convex
+	# polygon - true of every chunk here, since cutting a convex polygon with
+	# a straight line always leaves two convex pieces.
+	for i in range(1, n - 1):
+		for j in [0, i, i + 1]:
+			st.set_normal(Vector3.UP)
+			st.set_uv(_uv(uv_src[j], half))
+			st.add_vertex(Vector3(poly[j].x, 0.0, poly[j].y))
+		for j in [0, i + 1, i]:
+			st.set_normal(Vector3.DOWN)
+			st.set_uv(_uv(uv_src[j], half))
+			st.add_vertex(Vector3(poly[j].x, -thickness, poly[j].y))
 	return st.commit()
 
-static func _add_wall_quad(st: SurfaceTool, a: Vector2, b: Vector2, uv_a_src: Vector2, uv_b_src: Vector2, thickness: float, half: float) -> void:
+# The untextured side walls of one chunk - the exposed break surface, drawn
+# with BROKEN_EDGE_COLOR instead of the plate's texture.
+static func _build_edge_mesh(poly: PackedVector2Array, thickness: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := poly.size()
+	for i in n:
+		_add_wall_quad(st, poly[i], poly[(i + 1) % n], thickness)
+	return st.commit()
+
+static func _add_wall_quad(st: SurfaceTool, a: Vector2, b: Vector2, thickness: float) -> void:
 	# The wall's outward normal, found from its midpoint relative to the
-	# shard's own centroid (the mesh's local origin) rather than from vertex
-	# winding, for the same reason _build_shard_mesh() sets normals by hand.
+	# chunk's own centroid (the mesh's local origin) rather than from vertex
+	# winding, for the same reason _build_cap_mesh() sets normals by hand.
 	var mid := (a + b) * 0.5
 	var n2 := mid.normalized() if mid.length() > 0.001 else Vector2.RIGHT
 	var normal := Vector3(n2.x, 0.0, n2.y)
@@ -300,18 +377,59 @@ static func _add_wall_quad(st: SurfaceTool, a: Vector2, b: Vector2, uv_a_src: Ve
 	var b_top := Vector3(b.x, 0.0, b.y)
 	var a_bot := Vector3(a.x, -thickness, a.y)
 	var b_bot := Vector3(b.x, -thickness, b.y)
-	var uv_a := _uv(uv_a_src, half)
-	var uv_b := _uv(uv_b_src, half)
-	for entry in [[a_top, uv_a], [b_top, uv_b], [a_bot, uv_a], [b_top, uv_b], [b_bot, uv_b], [a_bot, uv_a]]:
+	for v in [a_top, b_top, a_bot, b_top, b_bot, a_bot]:
 		st.set_normal(normal)
-		st.set_uv(entry[1])
-		st.add_vertex(entry[0])
+		st.add_vertex(v)
 
 # Maps a tile-footprint-space point (+/-half on each axis) onto the plate
 # texture's 0..1 UV range, assuming it is stretched flat across the footprint
 # - true of the simple stone photos this project uses.
 static func _uv(p: Vector2, half: float) -> Vector2:
 	return Vector2(p.x / (half * 2.0) + 0.5, p.y / (half * 2.0) + 0.5)
+
+static func _get_broken_material() -> StandardMaterial3D:
+	if _broken_material != null:
+		return _broken_material
+	var material := StandardMaterial3D.new()
+	material.albedo_color = BROKEN_EDGE_COLOR
+	material.roughness = 1.0
+	material.metallic = 0.0
+	material.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	_broken_material = material
+	return material
+
+# A small burst of dust motes puffing up from the crack and fading out, to
+# sell "crumbling masonry" alongside the crack sound effect.
+func _spawn_dust(parent: Node, tile_origin: Vector3) -> void:
+	if _dust_mesh == null:
+		var quad := QuadMesh.new()
+		quad.size = Vector2.ONE * 0.09
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		material.albedo_color = DUST_COLOR
+		quad.material = material
+		_dust_mesh = quad
+	var particles := GPUParticles3D.new()
+	particles.amount = DUST_COUNT
+	particles.lifetime = DUST_LIFETIME
+	particles.one_shot = true
+	particles.explosiveness = 0.85
+	particles.draw_pass_1 = _dust_mesh
+	var process_material := ParticleProcessMaterial.new()
+	process_material.direction = Vector3.UP
+	process_material.spread = 60.0
+	process_material.initial_velocity_min = _plate_size * 0.3
+	process_material.initial_velocity_max = _plate_size * 0.9
+	process_material.gravity = Vector3(0.0, -1.2, 0.0)
+	process_material.scale_min = 0.5
+	process_material.scale_max = 1.4
+	particles.process_material = process_material
+	particles.position = tile_origin
+	parent.add_child(particles)
+	particles.emitting = true
+	particles.get_tree().create_timer(DUST_LIFETIME + CRACK_DURATION + 0.1).timeout.connect(particles.queue_free)
 
 static func _ease_out_back(x: float) -> float:
 	const C1 := 1.70158

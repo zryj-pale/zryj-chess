@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=4 uid="uid://c63as8hv8g444"]
+[gd_scene load_steps=9 format=4 uid="uid://c63as8hv8g444"]
 
 [ext_resource type="Script" uid="uid://cg1ohxf5jseks" path="res://scripts/main.gd" id="1_o6xl0"]
 [ext_resource type="AudioStream" uid="uid://4gqwbuyjyffw" path="res://audio/starbucks phonk.mp3" id="3_o6xl0"]
@@ -6,6 +6,7 @@
 [ext_resource type="AudioStream" uid="uid://c3mnxd6wpwosp" path="res://audio/check.mp3" id="5_ya4ey"]
 [ext_resource type="AudioStream" uid="uid://biu1ligyvf2xr" path="res://audio/nope.mp3" id="6_eb6dy"]
 [ext_resource type="AudioStream" uid="uid://dhyk785va0i38" path="res://audio/woof_2.mp3" id="7_trceg"]
+[ext_resource type="AudioStream" uid="uid://c6xgrugwcpp64" path="res://audio/kruszenie.wav" id="8_krszn"]
 [ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="hud_scene"]
 
 [node name="Node2D" type="Node2D" unique_id=494308546]
@@ -52,5 +53,9 @@ volume_db = -16.0
 [node name="ruch" type="AudioStreamPlayer" parent="dzwiek" unique_id=310122937]
 stream = ExtResource("7_trceg")
 volume_db = -16.0
+
+[node name="kruszenie" type="AudioStreamPlayer" parent="dzwiek"]
+stream = ExtResource("8_krszn")
+volume_db = -10.0
 
 [node name="HUD" parent="." unique_id=2015962604 instance=ExtResource("hud_scene")]

@@ -730,6 +730,7 @@ func _apply_hole(pole: Vector2i) -> void:
 	if tiles.has(pole):
 		tiles[pole].play_collapse()
 		tiles.erase(pole)
+		$dzwiek/kruszenie.play()
 	_hint_key = HINT_KEY_STALE
 	if sandbox:
 		return
